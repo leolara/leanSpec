@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
+import weakref
+from collections.abc import Callable, Sequence
 from functools import singledispatch
 from hashlib import sha256
 from itertools import accumulate, batched, repeat
@@ -197,6 +198,38 @@ def _pack_bits(bits: Sequence[Boolean]) -> list[Bytes32]:
     return _pack_bytes(packed_bits.to_bytes(math.ceil(len(bits) / 8), "little"))
 
 
+# Composite roots are memoized on object identity. Every SSZ container, list, and
+# vector is immutable (frozen container, tuple-backed collection), so a computed
+# root is valid for the object's whole lifetime. A functional update produces a
+# fresh object with a new identity, so the cache cannot return a stale root, and a
+# weak reference drops the entry when the object is collected, so nothing leaks and
+# no recycled identity can alias a dead object's root.
+#
+# This is the incremental-merkleization win: a state advanced one slot shares its
+# unchanged subtrees (the validator registry, history vectors) by reference with
+# the previous state, so re-rooting the new state reuses their cached roots instead
+# of re-hashing thousands of leaves.
+_composite_root_cache: dict[int, Bytes32] = {}
+_composite_root_refs: dict[int, weakref.ReferenceType[object]] = {}
+
+
+def _cached_composite_root(value: object, compute: Callable[[], Bytes32]) -> Bytes32:
+    """Return a composite's memoized root, computing and caching it on first sight."""
+    identity = id(value)
+    cached = _composite_root_cache.get(identity)
+    if cached is not None:
+        return cached
+    root = compute()
+    _composite_root_cache[identity] = root
+
+    def _evict(_reference: object, key: int = identity) -> None:
+        _composite_root_cache.pop(key, None)
+        _composite_root_refs.pop(key, None)
+
+    _composite_root_refs[identity] = weakref.ref(value, _evict)
+    return root
+
+
 @singledispatch
 def hash_tree_root(value: object) -> Bytes32:
     """
@@ -247,8 +280,7 @@ def _htr_bitlist_base(value: BaseBitlist) -> Bytes32:
     )
 
 
-@hash_tree_root.register
-def _htr_vector(value: SSZVector) -> Bytes32:
+def _vector_root(value: SSZVector) -> Bytes32:
     cls = type(value)
     element_t, length = cls.ELEMENT_TYPE, cls.LENGTH
     if issubclass(element_t, (BaseUint, Boolean, Fp)):
@@ -264,7 +296,11 @@ def _htr_vector(value: SSZVector) -> Bytes32:
 
 
 @hash_tree_root.register
-def _htr_list(value: SSZList) -> Bytes32:
+def _htr_vector(value: SSZVector) -> Bytes32:
+    return _cached_composite_root(value, lambda: _vector_root(value))
+
+
+def _list_root(value: SSZList) -> Bytes32:
     cls = type(value)
     element_t, limit = cls.ELEMENT_TYPE, cls.LIMIT
     if issubclass(element_t, (BaseUint, Boolean, Fp)):
@@ -280,7 +316,16 @@ def _htr_list(value: SSZList) -> Bytes32:
 
 
 @hash_tree_root.register
-def _htr_container(value: Container) -> Bytes32:
+def _htr_list(value: SSZList) -> Bytes32:
+    return _cached_composite_root(value, lambda: _list_root(value))
+
+
+def _container_root(value: Container) -> Bytes32:
     # Pydantic preserves declaration order, which is the canonical SSZ field order.
     cls = type(value)
     return merkleize([hash_tree_root(getattr(value, name)) for name in cls.model_fields])
+
+
+@hash_tree_root.register
+def _htr_container(value: Container) -> Bytes32:
+    return _cached_composite_root(value, lambda: _container_root(value))
