@@ -32,3 +32,8 @@ def xor(first: Bytes32, second: Bytes32) -> Bytes32:
 def bytes_to_uint64(data: bytes) -> Uint64:
     """Read a little-endian unsigned 64-bit integer from raw bytes."""
     return Uint64(int.from_bytes(data, "little"))
+
+
+def uint64_to_bytes(value: Uint64) -> bytes:
+    """Serialize an unsigned 64-bit integer to its eight little-endian bytes."""
+    return int(value).to_bytes(8, "little")
