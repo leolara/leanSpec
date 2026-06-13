@@ -14,6 +14,7 @@ from lean_spec.spec.forks.gloas.accessors import (
 )
 from lean_spec.spec.forks.gloas.config import (
     CHURN_LIMIT_QUOTIENT_GLOAS,
+    MIN_BUILDER_WITHDRAWABILITY_DELAY,
     MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA,
     MIN_VALIDATOR_WITHDRAWABILITY_DELAY,
 )
@@ -25,11 +26,17 @@ from lean_spec.spec.forks.gloas.constants import (
 from lean_spec.spec.forks.gloas.containers.beacon_chain import (
     Balances,
     BeaconState,
+    Builders,
     Slashings,
     Validator,
     Validators,
 )
-from lean_spec.spec.forks.gloas.containers.primitives import Epoch, Gwei, ValidatorIndex
+from lean_spec.spec.forks.gloas.containers.primitives import (
+    BuilderIndex,
+    Epoch,
+    Gwei,
+    ValidatorIndex,
+)
 from lean_spec.spec.forks.gloas.preset import (
     EFFECTIVE_BALANCE_INCREMENT,
     EPOCHS_PER_SLASHINGS_VECTOR,
@@ -124,6 +131,18 @@ def initiate_validator_exit(state: BeaconState, index: ValidatorIndex) -> Beacon
         }
     )
     return replace_validator(state, int(index), exited_validator)
+
+
+def initiate_builder_exit(state: BeaconState, builder_index: BuilderIndex) -> BeaconState:
+    """Return a state with the builder's withdrawable epoch scheduled."""
+    builder = state.builders[int(builder_index)]
+    withdrawable_epoch = Epoch(
+        int(get_current_epoch(state)) + int(MIN_BUILDER_WITHDRAWABILITY_DELAY)
+    )
+    updated_builder = builder.model_copy(update={"withdrawable_epoch": withdrawable_epoch})
+    builders = list(state.builders)
+    builders[int(builder_index)] = updated_builder
+    return state.model_copy(update={"builders": Builders(data=builders)})
 
 
 def slash_validator(

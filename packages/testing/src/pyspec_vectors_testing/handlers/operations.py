@@ -24,6 +24,7 @@ from lean_spec.spec.forks.gloas.containers.beacon_chain import (
     BeaconState,
     ProposerSlashing,
     SignedBLSToExecutionChange,
+    SignedVoluntaryExit,
     WithdrawalRequest,
 )
 from lean_spec.spec.forks.gloas.state_transition.operations import (
@@ -32,6 +33,7 @@ from lean_spec.spec.forks.gloas.state_transition.operations import (
     process_block_header,
     process_bls_to_execution_change,
     process_proposer_slashing,
+    process_voluntary_exit,
     process_withdrawal_request,
 )
 from lean_spec.spec.ssz.ssz_base import SSZType
@@ -78,6 +80,16 @@ OPERATION_SPECS: dict[str, OperationSpec] = {
         process=process_withdrawal_request,
         container=WithdrawalRequest,
         file_stem="withdrawal_request",
+    ),
+    "voluntary_exit": OperationSpec(
+        process=process_voluntary_exit,
+        container=SignedVoluntaryExit,
+        file_stem="voluntary_exit",
+    ),
+    "voluntary_exit_churn": OperationSpec(
+        process=process_voluntary_exit,
+        container=SignedVoluntaryExit,
+        file_stem="voluntary_exit",
     ),
 }
 

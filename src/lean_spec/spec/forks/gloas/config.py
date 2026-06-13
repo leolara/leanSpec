@@ -80,3 +80,6 @@ CHURN_LIMIT_QUOTIENT_GLOAS = Uint64(16) if _MINIMAL else Uint64(32768)
 
 SHARD_COMMITTEE_PERIOD = Uint64(64) if _MINIMAL else Uint64(256)
 """Epochs a validator must be active before it may request a voluntary exit."""
+
+MIN_BUILDER_WITHDRAWABILITY_DELAY = Epoch(2) if _MINIMAL else Epoch(8192)
+"""Epochs an exited builder waits before its balance becomes withdrawable."""

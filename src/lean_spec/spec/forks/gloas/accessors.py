@@ -14,6 +14,7 @@ from hashlib import sha256
 
 from lean_spec.spec.forks.gloas.constants import (
     DOMAIN_BEACON_ATTESTER,
+    FAR_FUTURE_EPOCH,
     GENESIS_EPOCH,
     TIMELY_HEAD_FLAG_INDEX,
     TIMELY_SOURCE_FLAG_INDEX,
@@ -27,6 +28,7 @@ from lean_spec.spec.forks.gloas.containers.beacon_chain import (
     IndexedAttestation,
 )
 from lean_spec.spec.forks.gloas.containers.primitives import (
+    BuilderIndex,
     CommitteeIndex,
     DomainType,
     Epoch,
@@ -188,6 +190,32 @@ def get_pending_balance_to_withdraw(state: BeaconState, validator_index: Validat
             if withdrawal.validator_index == validator_index
         )
     )
+
+
+def is_active_builder(state: BeaconState, builder_index: BuilderIndex) -> bool:
+    """Check whether a builder is finalized into the registry and not exiting."""
+    builder = state.builders[int(builder_index)]
+    return (
+        builder.deposit_epoch < state.finalized_checkpoint.epoch
+        and builder.withdrawable_epoch == FAR_FUTURE_EPOCH
+    )
+
+
+def get_pending_balance_to_withdraw_for_builder(
+    state: BeaconState, builder_index: BuilderIndex
+) -> Gwei:
+    """Return the gwei a builder has queued across pending withdrawals and payments."""
+    from_withdrawals = sum(
+        int(withdrawal.amount)
+        for withdrawal in state.builder_pending_withdrawals
+        if withdrawal.builder_index == builder_index
+    )
+    from_payments = sum(
+        int(payment.withdrawal.amount)
+        for payment in state.builder_pending_payments
+        if payment.withdrawal.builder_index == builder_index
+    )
+    return Gwei(from_withdrawals + from_payments)
 
 
 def get_committee_indices(committee_bits: BaseBitvector) -> list[CommitteeIndex]:

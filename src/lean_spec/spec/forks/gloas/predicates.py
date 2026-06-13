@@ -8,6 +8,8 @@ validity. They carry no state mutation.
 
 from lean_spec.spec.crypto import bls
 from lean_spec.spec.forks.gloas.constants import (
+    BUILDER_INDEX_FLAG,
+    BUILDER_WITHDRAWAL_PREFIX,
     COMPOUNDING_WITHDRAWAL_PREFIX,
     DOMAIN_BEACON_ATTESTER,
     ETH1_ADDRESS_WITHDRAWAL_PREFIX,
@@ -19,7 +21,12 @@ from lean_spec.spec.forks.gloas.containers.beacon_chain import (
     IndexedAttestation,
     Validator,
 )
-from lean_spec.spec.forks.gloas.containers.primitives import Epoch, Gwei
+from lean_spec.spec.forks.gloas.containers.primitives import (
+    BuilderIndex,
+    Epoch,
+    Gwei,
+    ValidatorIndex,
+)
 from lean_spec.spec.forks.gloas.preset import MAX_EFFECTIVE_BALANCE_ELECTRA, MIN_ACTIVATION_BALANCE
 from lean_spec.spec.forks.gloas.signing import compute_signing_root, get_domain
 from lean_spec.spec.ssz import Bytes32
@@ -130,6 +137,26 @@ def is_partially_withdrawable_validator(validator: Validator, balance: Gwei) -> 
         and has_max_effective_balance
         and has_excess_balance
     )
+
+
+def is_builder_index(validator_index: ValidatorIndex) -> bool:
+    """
+    Check whether an index encodes a builder rather than a validator.
+
+    Builders share the validator index space; the high builder flag bit
+    distinguishes them.
+    """
+    return (int(validator_index) & int(BUILDER_INDEX_FLAG)) != 0
+
+
+def convert_validator_index_to_builder_index(validator_index: ValidatorIndex) -> BuilderIndex:
+    """Strip the builder flag bit to recover a builder-registry index."""
+    return BuilderIndex(int(validator_index) & ~int(BUILDER_INDEX_FLAG))
+
+
+def is_builder_withdrawal_credential(withdrawal_credentials: Bytes32) -> bool:
+    """Check whether withdrawal credentials carry the builder prefix."""
+    return bytes(withdrawal_credentials)[:1] == BUILDER_WITHDRAWAL_PREFIX
 
 
 def is_valid_indexed_attestation(

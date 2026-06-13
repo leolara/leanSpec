@@ -23,11 +23,14 @@ from lean_spec.spec.forks.gloas.accessors import (
     get_current_epoch,
     get_indexed_attestation,
     get_pending_balance_to_withdraw,
+    get_pending_balance_to_withdraw_for_builder,
     get_previous_epoch,
     has_flag,
+    is_active_builder,
     is_attestation_same_slot,
 )
 from lean_spec.spec.forks.gloas.config import (
+    CAPELLA_FORK_VERSION,
     MIN_VALIDATOR_WITHDRAWABILITY_DELAY,
     SHARD_COMMITTEE_PERIOD,
 )
@@ -35,6 +38,7 @@ from lean_spec.spec.forks.gloas.constants import (
     BLS_WITHDRAWAL_PREFIX,
     DOMAIN_BEACON_PROPOSER,
     DOMAIN_BLS_TO_EXECUTION_CHANGE,
+    DOMAIN_VOLUNTARY_EXIT,
     ETH1_ADDRESS_WITHDRAWAL_PREFIX,
     FAR_FUTURE_EPOCH,
     FULL_EXIT_REQUEST_AMOUNT,
@@ -54,14 +58,17 @@ from lean_spec.spec.forks.gloas.containers.beacon_chain import (
     PendingPartialWithdrawals,
     ProposerSlashing,
     SignedBLSToExecutionChange,
+    SignedVoluntaryExit,
     Validators,
     WithdrawalRequest,
 )
 from lean_spec.spec.forks.gloas.containers.primitives import Epoch, Gwei, Root, ValidatorIndex
 from lean_spec.spec.forks.gloas.predicates import (
+    convert_validator_index_to_builder_index,
     has_compounding_withdrawal_credential,
     has_execution_withdrawal_credential,
     is_active_validator,
+    is_builder_index,
     is_slashable_attestation_data,
     is_slashable_validator,
     is_valid_indexed_attestation,
@@ -76,6 +83,7 @@ from lean_spec.spec.forks.gloas.signing import compute_domain, compute_signing_r
 from lean_spec.spec.forks.gloas.state_transition.mutators import (
     compute_exit_epoch_and_update_churn,
     increase_balance,
+    initiate_builder_exit,
     initiate_validator_exit,
     slash_validator,
 )
@@ -287,6 +295,45 @@ def process_withdrawal_request(
     return state.model_copy(
         update={"pending_partial_withdrawals": PendingPartialWithdrawals(data=queued)}
     )
+
+
+def process_voluntary_exit(
+    state: BeaconState, signed_voluntary_exit: SignedVoluntaryExit
+) -> BeaconState:
+    """
+    Initiate the exit of a validator or builder that signed a voluntary exit.
+
+    The exit uses the Capella fork version so it stays valid across forks. A
+    builder index routes to the builder exit; otherwise the validator must be
+    active, not already exiting, and seasoned past the shard-committee period.
+
+    Raises:
+        AssertionError: If the exit is premature, the subject is ineligible, or the signature fails.
+    """
+    voluntary_exit = signed_voluntary_exit.message
+    domain = compute_domain(
+        DOMAIN_VOLUNTARY_EXIT, CAPELLA_FORK_VERSION, state.genesis_validators_root
+    )
+    signing_root = compute_signing_root(voluntary_exit, domain)
+
+    assert int(get_current_epoch(state)) >= int(voluntary_exit.epoch)
+
+    if is_builder_index(voluntary_exit.validator_index):
+        builder_index = convert_validator_index_to_builder_index(voluntary_exit.validator_index)
+        assert is_active_builder(state, builder_index)
+        assert int(get_pending_balance_to_withdraw_for_builder(state, builder_index)) == 0
+        public_key = state.builders[int(builder_index)].public_key
+        assert bls.Verify(public_key, signing_root, signed_voluntary_exit.signature)
+        return initiate_builder_exit(state, builder_index)
+
+    validator = state.validators[int(voluntary_exit.validator_index)]
+    assert is_active_validator(validator, get_current_epoch(state))
+    assert validator.exit_epoch == FAR_FUTURE_EPOCH
+    activation_floor = int(validator.activation_epoch) + int(SHARD_COMMITTEE_PERIOD)
+    assert int(get_current_epoch(state)) >= activation_floor
+    assert int(get_pending_balance_to_withdraw(state, voluntary_exit.validator_index)) == 0
+    assert bls.Verify(validator.public_key, signing_root, signed_voluntary_exit.signature)
+    return initiate_validator_exit(state, voluntary_exit.validator_index)
 
 
 def process_block_header(state: BeaconState, block: BeaconBlock) -> BeaconState:
