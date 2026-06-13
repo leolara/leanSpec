@@ -14,8 +14,13 @@ spec under one consistent preset.
 from __future__ import annotations
 
 import pytest
+import yaml
 
+from pyspec_vectors_testing.handlers.operations import run_operations_case
 from pyspec_vectors_testing.handlers.shuffling import run_shuffling_case
+
+# Runners whose cases this harness knows how to execute.
+SUPPORTED_RUNNERS = frozenset({"shuffling", "operations"})
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -29,20 +34,28 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     )
 
 
-class ShufflingCaseFile(pytest.File):
-    """A shuffling case directory, identified by its mapping file."""
+class VectorCaseFile(pytest.File):
+    """A vector case directory, identified by its manifest file."""
 
     def collect(self):  # noqa: ANN201
         """Yield the single item that runs this case."""
-        yield ShufflingCaseItem.from_parent(self, name=self.path.parent.name)
+        yield VectorCaseItem.from_parent(self, name=self.path.parent.name)
 
 
-class ShufflingCaseItem(pytest.Item):
-    """One shuffling vector case."""
+class VectorCaseItem(pytest.Item):
+    """One vector case, dispatched to a handler by the runner named in its manifest."""
 
     def runtest(self) -> None:
-        """Run the case through the shuffling handler."""
-        run_shuffling_case(self.path.parent)
+        """Dispatch the case to the handler for its runner."""
+        case_dir = self.path.parent
+        manifest = yaml.safe_load((case_dir / "manifest.yaml").read_text())
+        runner = manifest.get("runner")
+        if runner == "shuffling":
+            run_shuffling_case(case_dir)
+        elif runner == "operations":
+            run_operations_case(case_dir, manifest.get("handler"))
+        else:
+            pytest.skip(f"runner not yet supported: {runner}")
 
     def repr_failure(self, excinfo, style=None):  # noqa: ANN001, ANN201
         """Render the handler's own assertion message, not a Python traceback."""
@@ -52,11 +65,14 @@ class ShufflingCaseItem(pytest.Item):
 
     def reportinfo(self):  # noqa: ANN201
         """Provide a readable location for the item in reports."""
-        return self.path, 0, f"shuffling: {self.name}"
+        return self.path, 0, self.name
 
 
 def pytest_collect_file(parent: pytest.Collector, file_path) -> pytest.Collector | None:  # noqa: ANN001
-    """Collect each shuffling case from its mapping file."""
-    if file_path.name == "mapping.yaml" and "shuffling" in file_path.parts:
-        return ShufflingCaseFile.from_parent(parent, path=file_path)
+    """Collect each supported vector case from its manifest file."""
+    if file_path.name != "manifest.yaml":
+        return None
+    manifest = yaml.safe_load(file_path.read_text())
+    if manifest and manifest.get("runner") in SUPPORTED_RUNNERS:
+        return VectorCaseFile.from_parent(parent, path=file_path)
     return None
