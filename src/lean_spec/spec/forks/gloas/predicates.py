@@ -12,16 +12,21 @@ from lean_spec.spec.forks.gloas.constants import (
     BUILDER_WITHDRAWAL_PREFIX,
     COMPOUNDING_WITHDRAWAL_PREFIX,
     DOMAIN_BEACON_ATTESTER,
+    DOMAIN_DEPOSIT,
     ETH1_ADDRESS_WITHDRAWAL_PREFIX,
     FAR_FUTURE_EPOCH,
 )
 from lean_spec.spec.forks.gloas.containers.beacon_chain import (
     AttestationData,
     BeaconState,
+    DepositMessage,
     IndexedAttestation,
+    PendingDeposits,
     Validator,
 )
 from lean_spec.spec.forks.gloas.containers.primitives import (
+    BLSPubkey,
+    BLSSignature,
     BuilderIndex,
     Epoch,
     Gwei,
@@ -166,3 +171,36 @@ class PredicatesMixin(GloasSpecBase):
         )
         signing_root = self.compute_signing_root(indexed_attestation.data, domain)
         return bls.FastAggregateVerify(public_keys, signing_root, indexed_attestation.signature)
+
+    def is_valid_deposit_signature(
+        self,
+        public_key: BLSPubkey,
+        withdrawal_credentials: Bytes32,
+        amount: Gwei,
+        signature: BLSSignature,
+    ) -> bool:
+        """Check a deposit's proof-of-possession signature over its fork-agnostic message."""
+        deposit_message = DepositMessage(
+            public_key=public_key,
+            withdrawal_credentials=withdrawal_credentials,
+            amount=amount,
+        )
+        domain = self.compute_domain(DOMAIN_DEPOSIT)
+        signing_root = self.compute_signing_root(deposit_message, domain)
+        return bls.Verify(public_key, signing_root, signature)
+
+    def is_pending_validator(
+        self, pending_deposits: PendingDeposits, public_key: BLSPubkey
+    ) -> bool:
+        """Check whether a validly-signed deposit for a public key is already queued."""
+        for pending_deposit in pending_deposits:
+            if pending_deposit.public_key != public_key:
+                continue
+            if self.is_valid_deposit_signature(
+                pending_deposit.public_key,
+                pending_deposit.withdrawal_credentials,
+                pending_deposit.amount,
+                pending_deposit.signature,
+            ):
+                return True
+        return False

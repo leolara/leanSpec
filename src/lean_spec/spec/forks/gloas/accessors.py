@@ -212,6 +212,15 @@ class AccessorMixin(GloasSpecBase):
             and builder.withdrawable_epoch == FAR_FUTURE_EPOCH
         )
 
+    def get_index_for_new_builder(self, state: BeaconState) -> BuilderIndex:
+        """Return a reusable exited-builder slot, or the next free index past the registry."""
+        current_epoch = self.get_current_epoch(state)
+        for builder_index, builder in enumerate(state.builders):
+            # An exited builder whose balance has fully withdrawn frees its slot.
+            if builder.withdrawable_epoch <= current_epoch and builder.balance == Gwei(0):
+                return BuilderIndex(builder_index)
+        return BuilderIndex(len(state.builders))
+
     def get_pending_balance_to_withdraw_for_builder(
         self, state: BeaconState, builder_index: BuilderIndex
     ) -> Gwei:

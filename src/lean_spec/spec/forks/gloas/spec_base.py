@@ -21,6 +21,7 @@ from lean_spec.spec.forks.gloas.containers.beacon_chain import (
     BuilderPendingPayment,
     ConsolidationRequest,
     IndexedAttestation,
+    PendingDeposits,
     ProposerSlashing,
     SignedBLSToExecutionChange,
     SignedVoluntaryExit,
@@ -28,6 +29,8 @@ from lean_spec.spec.forks.gloas.containers.beacon_chain import (
     WithdrawalRequest,
 )
 from lean_spec.spec.forks.gloas.containers.primitives import (
+    BLSPubkey,
+    BLSSignature,
     BuilderIndex,
     CommitteeIndex,
     Domain,
@@ -279,6 +282,11 @@ class GloasSpecBase(GloasProtocol):
         ...
 
     @abstractmethod
+    def get_index_for_new_builder(self, state: BeaconState) -> BuilderIndex:
+        """Return a reusable exited-builder slot, or the next free index past the registry."""
+        ...
+
+    @abstractmethod
     def get_pending_balance_to_withdraw_for_builder(
         self, state: BeaconState, builder_index: BuilderIndex
     ) -> Gwei:
@@ -411,6 +419,37 @@ class GloasSpecBase(GloasProtocol):
         whistleblower_index: ValidatorIndex | None = None,
     ) -> BeaconState:
         """Return a state with the validator slashed, penalized, and the reward paid out."""
+        ...
+
+    @abstractmethod
+    def is_valid_deposit_signature(
+        self,
+        public_key: BLSPubkey,
+        withdrawal_credentials: Bytes32,
+        amount: Gwei,
+        signature: BLSSignature,
+    ) -> bool:
+        """Check a deposit's proof-of-possession signature."""
+        ...
+
+    @abstractmethod
+    def is_pending_validator(
+        self, pending_deposits: PendingDeposits, public_key: BLSPubkey
+    ) -> bool:
+        """Check whether a validly-signed deposit for a public key is already queued."""
+        ...
+
+    @abstractmethod
+    def apply_deposit_for_builder(
+        self,
+        state: BeaconState,
+        public_key: BLSPubkey,
+        withdrawal_credentials: Bytes32,
+        amount: Gwei,
+        signature: BLSSignature,
+        slot: Slot,
+    ) -> BeaconState:
+        """Register a new builder from a valid deposit, or top up an existing one."""
         ...
 
     @abstractmethod

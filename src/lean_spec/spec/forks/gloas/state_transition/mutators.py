@@ -24,6 +24,7 @@ from lean_spec.spec.forks.gloas.constants import (
 from lean_spec.spec.forks.gloas.containers.beacon_chain import (
     Balances,
     BeaconState,
+    Builder,
     Builders,
     PendingDeposit,
     PendingDeposits,
@@ -32,9 +33,13 @@ from lean_spec.spec.forks.gloas.containers.beacon_chain import (
     Validators,
 )
 from lean_spec.spec.forks.gloas.containers.primitives import (
+    BLSPubkey,
+    BLSSignature,
     BuilderIndex,
     Epoch,
+    ExecutionAddress,
     Gwei,
+    Slot,
     ValidatorIndex,
 )
 from lean_spec.spec.forks.gloas.preset import (
@@ -45,7 +50,7 @@ from lean_spec.spec.forks.gloas.preset import (
     WHISTLEBLOWER_REWARD_QUOTIENT_ELECTRA,
 )
 from lean_spec.spec.forks.gloas.spec_base import GloasSpecBase
-from lean_spec.spec.ssz import Boolean, Bytes32
+from lean_spec.spec.ssz import Boolean, Bytes32, Uint8
 
 
 class MutatorMixin(GloasSpecBase):
@@ -270,3 +275,58 @@ class MutatorMixin(GloasSpecBase):
         return self.increase_balance(
             state, rewarded_whistleblower, Gwei(int(whistleblower_reward) - int(proposer_reward))
         )
+
+    def add_builder_to_registry(
+        self,
+        state: BeaconState,
+        public_key: BLSPubkey,
+        withdrawal_credentials: Bytes32,
+        amount: Gwei,
+        slot: Slot,
+    ) -> BeaconState:
+        """Return a state with a new builder placed in a reusable or freshly appended slot."""
+        credentials = bytes(withdrawal_credentials)
+        new_builder = Builder(
+            public_key=public_key,
+            version=Uint8(credentials[0]),
+            execution_address=ExecutionAddress(credentials[12:]),
+            balance=amount,
+            deposit_epoch=self.compute_epoch_at_slot(slot),
+            withdrawable_epoch=FAR_FUTURE_EPOCH,
+        )
+        builders = list(state.builders)
+        # Builder indices are reusable: an exited, fully-withdrawn slot is overwritten,
+        # otherwise the registry grows by one.
+        new_builder_index = int(self.get_index_for_new_builder(state))
+        if new_builder_index < len(builders):
+            builders[new_builder_index] = new_builder
+        else:
+            builders.append(new_builder)
+        return state.model_copy(update={"builders": Builders(data=builders)})
+
+    def apply_deposit_for_builder(
+        self,
+        state: BeaconState,
+        public_key: BLSPubkey,
+        withdrawal_credentials: Bytes32,
+        amount: Gwei,
+        signature: BLSSignature,
+        slot: Slot,
+    ) -> BeaconState:
+        """Register a new builder from a valid deposit, or top up an existing one."""
+        builder_public_keys = [builder.public_key for builder in state.builders]
+        if public_key not in builder_public_keys:
+            if self.is_valid_deposit_signature(
+                public_key, withdrawal_credentials, amount, signature
+            ):
+                return self.add_builder_to_registry(
+                    state, public_key, withdrawal_credentials, amount, slot
+                )
+            return state
+        builder_index = builder_public_keys.index(public_key)
+        builders = list(state.builders)
+        topped_up = builders[builder_index].model_copy(
+            update={"balance": Gwei(int(builders[builder_index].balance) + int(amount))}
+        )
+        builders[builder_index] = topped_up
+        return state.model_copy(update={"builders": Builders(data=builders)})

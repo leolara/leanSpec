@@ -36,8 +36,11 @@ from lean_spec.spec.forks.gloas.containers.beacon_chain import (
     BuilderPendingPayment,
     BuilderPendingPayments,
     ConsolidationRequest,
+    DepositRequest,
     PendingConsolidation,
     PendingConsolidations,
+    PendingDeposit,
+    PendingDeposits,
     PendingPartialWithdrawal,
     PendingPartialWithdrawals,
     ProposerSlashing,
@@ -500,3 +503,44 @@ class OperationMixin(GloasSpecBase):
         return state.model_copy(
             update={"builder_pending_payments": BuilderPendingPayments(data=payments)}
         )
+
+    def process_deposit_request(
+        self, state: BeaconState, deposit_request: DepositRequest
+    ) -> BeaconState:
+        """
+        Apply an execution-layer deposit request to a builder or the deposit queue.
+
+        A deposit for an existing builder, or a builder-credential deposit for a key
+        that is neither a validator nor already queued, settles into the builder
+        registry at once. Every other deposit joins the pending-deposit queue.
+        """
+        builder_public_keys = [builder.public_key for builder in state.builders]
+        validator_public_keys = [validator.public_key for validator in state.validators]
+        is_builder = deposit_request.public_key in builder_public_keys
+        is_validator = deposit_request.public_key in validator_public_keys
+
+        if is_builder or (
+            self.is_builder_withdrawal_credential(deposit_request.withdrawal_credentials)
+            and not is_validator
+            and not self.is_pending_validator(state.pending_deposits, deposit_request.public_key)
+        ):
+            return self.apply_deposit_for_builder(
+                state,
+                deposit_request.public_key,
+                deposit_request.withdrawal_credentials,
+                deposit_request.amount,
+                deposit_request.signature,
+                state.slot,
+            )
+
+        queued = [
+            *list(state.pending_deposits),
+            PendingDeposit(
+                public_key=deposit_request.public_key,
+                withdrawal_credentials=deposit_request.withdrawal_credentials,
+                amount=deposit_request.amount,
+                signature=deposit_request.signature,
+                slot=state.slot,
+            ),
+        ]
+        return state.model_copy(update={"pending_deposits": PendingDeposits(data=queued)})
