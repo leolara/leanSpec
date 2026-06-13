@@ -43,12 +43,21 @@ def pyspec_vectors(pytest_args: Sequence[str], preset: str) -> None:
 
     vectors_path = ensure_preset(preset)
 
+    # Collect only the subtrees this port exercises. The release ships every fork's
+    # vectors, and walking all of them on each xdist worker dominates startup. The
+    # Gloas subtree holds every fork-specific format; the fork-agnostic shuffling
+    # vectors live under phase0 and are added explicitly.
+    candidate_roots = [vectors_path / "gloas", vectors_path / "phase0" / "shuffling"]
+    collection_roots = [str(root) for root in candidate_roots if root.is_dir()]
+    if not collection_roots:
+        collection_roots = [str(vectors_path)]
+
     config_path = Path(__file__).parent / "pytest_ini_files" / "pytest-pyspec-vectors.ini"
     args = [
         "-c",
         str(config_path),
         f"--preset={preset}",
-        str(vectors_path),
+        *collection_roots,
         *pytest_args,
     ]
     exit_code = subprocess.run([sys.executable, "-m", "pytest", *args]).returncode
