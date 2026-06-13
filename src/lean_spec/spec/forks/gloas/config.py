@@ -88,6 +88,12 @@ MIN_BUILDER_WITHDRAWABILITY_DELAY = Epoch(2) if _MINIMAL else Epoch(8192)
 CONSOLIDATION_CHURN_LIMIT_QUOTIENT = Uint64(32) if _MINIMAL else Uint64(65536)
 """Divisor of total active balance setting the per-epoch consolidation churn."""
 
+INACTIVITY_SCORE_BIAS = Uint64(4)
+"""Per-epoch inactivity-score increase for a validator that misses the target."""
+
+INACTIVITY_SCORE_RECOVERY_RATE = Uint64(16)
+"""Per-epoch inactivity-score decrease once the chain is no longer leaking."""
+
 
 @dataclass(frozen=True)
 class BlobParameters:

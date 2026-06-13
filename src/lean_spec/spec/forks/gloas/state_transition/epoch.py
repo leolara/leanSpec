@@ -8,12 +8,24 @@ consensus vectors can exercise it in isolation.
 """
 
 from lean_spec.spec.crypto.merkleization import hash_tree_root
+from lean_spec.spec.forks.gloas.config import (
+    INACTIVITY_SCORE_BIAS,
+    INACTIVITY_SCORE_RECOVERY_RATE,
+)
+from lean_spec.spec.forks.gloas.constants import (
+    GENESIS_EPOCH,
+    JUSTIFICATION_BITS_LENGTH,
+    TIMELY_TARGET_FLAG_INDEX,
+)
 from lean_spec.spec.forks.gloas.containers.beacon_chain import (
     BeaconState,
+    Checkpoint,
     CurrentEpochParticipation,
     Eth1DataVotes,
     HistoricalSummaries,
     HistoricalSummary,
+    InactivityScores,
+    JustificationBits,
     PreviousEpochParticipation,
     RandaoMixes,
     Slashings,
@@ -32,16 +44,120 @@ from lean_spec.spec.forks.gloas.preset import (
     SLOTS_PER_HISTORICAL_ROOT,
 )
 from lean_spec.spec.forks.gloas.spec_base import GloasSpecBase
+from lean_spec.spec.ssz import Boolean, Uint64
 
 _EPOCHS_PER_SLASHINGS_VECTOR = int(EPOCHS_PER_SLASHINGS_VECTOR)
 _EPOCHS_PER_HISTORICAL_VECTOR = int(EPOCHS_PER_HISTORICAL_VECTOR)
 _EPOCHS_PER_ETH1_VOTING_PERIOD = int(EPOCHS_PER_ETH1_VOTING_PERIOD)
 _SLOTS_PER_HISTORICAL_ROOT = int(SLOTS_PER_HISTORICAL_ROOT)
 _SLOTS_PER_EPOCH = int(SLOTS_PER_EPOCH)
+_JUSTIFICATION_BITS_LENGTH = int(JUSTIFICATION_BITS_LENGTH)
 
 
 class EpochMixin(GloasSpecBase):
     """Per-epoch transition behavior for the Gloas spec."""
+
+    def weigh_justification_and_finalization(
+        self,
+        state: BeaconState,
+        total_active_balance: Gwei,
+        previous_epoch_target_balance: Gwei,
+        current_epoch_target_balance: Gwei,
+    ) -> BeaconState:
+        """Justify epochs that reached the 2/3 target vote and finalize older justified chains."""
+        previous_epoch = self.get_previous_epoch(state)
+        current_epoch = self.get_current_epoch(state)
+        old_previous_justified_checkpoint = state.previous_justified_checkpoint
+        old_current_justified_checkpoint = state.current_justified_checkpoint
+
+        # Shift the justification record one epoch older and clear the newest bit.
+        current_justified_checkpoint = state.current_justified_checkpoint
+        previous_bits = list(state.justification_bits.data)
+        justification_bits = [Boolean(False), *previous_bits[: _JUSTIFICATION_BITS_LENGTH - 1]]
+
+        # Threshold: a target balance of at least two-thirds of the active balance justifies.
+        if int(previous_epoch_target_balance) * 3 >= int(total_active_balance) * 2:
+            current_justified_checkpoint = Checkpoint(
+                epoch=previous_epoch, root=self.get_block_root(state, previous_epoch)
+            )
+            justification_bits[1] = Boolean(True)
+        if int(current_epoch_target_balance) * 3 >= int(total_active_balance) * 2:
+            current_justified_checkpoint = Checkpoint(
+                epoch=current_epoch, root=self.get_block_root(state, current_epoch)
+            )
+            justification_bits[0] = Boolean(True)
+
+        # Finalize on the four classic source-to-target justification spans.
+        finalized_checkpoint = state.finalized_checkpoint
+        if all(justification_bits[1:4]) and (
+            int(old_previous_justified_checkpoint.epoch) + 3 == int(current_epoch)
+        ):
+            finalized_checkpoint = old_previous_justified_checkpoint
+        if all(justification_bits[1:3]) and (
+            int(old_previous_justified_checkpoint.epoch) + 2 == int(current_epoch)
+        ):
+            finalized_checkpoint = old_previous_justified_checkpoint
+        if all(justification_bits[0:3]) and (
+            int(old_current_justified_checkpoint.epoch) + 2 == int(current_epoch)
+        ):
+            finalized_checkpoint = old_current_justified_checkpoint
+        if all(justification_bits[0:2]) and (
+            int(old_current_justified_checkpoint.epoch) + 1 == int(current_epoch)
+        ):
+            finalized_checkpoint = old_current_justified_checkpoint
+
+        return state.model_copy(
+            update={
+                "previous_justified_checkpoint": old_current_justified_checkpoint,
+                "current_justified_checkpoint": current_justified_checkpoint,
+                "justification_bits": JustificationBits(data=justification_bits),
+                "finalized_checkpoint": finalized_checkpoint,
+            }
+        )
+
+    def process_justification_and_finalization(self, state: BeaconState) -> BeaconState:
+        """Tally the target votes of the last two epochs and update justification and finality."""
+        # The genesis checkpoint root is a stub, so skip the first two epochs.
+        if int(self.get_current_epoch(state)) <= int(GENESIS_EPOCH) + 1:
+            return state
+        previous_indices = self.get_unslashed_participating_indices(
+            state, TIMELY_TARGET_FLAG_INDEX, self.get_previous_epoch(state)
+        )
+        current_indices = self.get_unslashed_participating_indices(
+            state, TIMELY_TARGET_FLAG_INDEX, self.get_current_epoch(state)
+        )
+        total_active_balance = self.get_total_active_balance(state)
+        previous_target_balance = self.get_total_balance(state, previous_indices)
+        current_target_balance = self.get_total_balance(state, current_indices)
+        return self.weigh_justification_and_finalization(
+            state, total_active_balance, previous_target_balance, current_target_balance
+        )
+
+    def process_inactivity_updates(self, state: BeaconState) -> BeaconState:
+        """Raise inactivity scores for absent validators and recover them when not leaking."""
+        # Scores reflect the previous epoch's participation, which is undefined at genesis.
+        if self.get_current_epoch(state) == GENESIS_EPOCH:
+            return state
+
+        previous_target_indices = self.get_unslashed_participating_indices(
+            state, TIMELY_TARGET_FLAG_INDEX, self.get_previous_epoch(state)
+        )
+        in_inactivity_leak = self.is_in_inactivity_leak(state)
+        inactivity_scores = list(state.inactivity_scores)
+        for validator_index in self.get_eligible_validator_indices(state):
+            position = int(validator_index)
+            score = int(inactivity_scores[position])
+            if validator_index in previous_target_indices:
+                score -= min(1, score)
+            else:
+                score += int(INACTIVITY_SCORE_BIAS)
+            # A leak-free epoch recovers every eligible validator's score, not just attesters.
+            if not in_inactivity_leak:
+                score -= min(int(INACTIVITY_SCORE_RECOVERY_RATE), score)
+            inactivity_scores[position] = Uint64(score)
+        return state.model_copy(
+            update={"inactivity_scores": InactivityScores(data=inactivity_scores)}
+        )
 
     def process_eth1_data_reset(self, state: BeaconState) -> BeaconState:
         """Clear the eth1 data vote tally at the end of each voting period."""

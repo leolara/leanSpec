@@ -68,6 +68,7 @@ from lean_spec.spec.forks.gloas.preset import (
     MAX_WITHDRAWALS_PER_PAYLOAD,
     MIN_ACTIVATION_BALANCE,
     MIN_ATTESTATION_INCLUSION_DELAY,
+    MIN_EPOCHS_TO_INACTIVITY_PENALTY,
     MIN_SEED_LOOKAHEAD,
     SLOTS_PER_EPOCH,
     SLOTS_PER_HISTORICAL_ROOT,
@@ -203,6 +204,41 @@ class AccessorMixin(GloasSpecBase):
         """Return the summed effective balance of the currently active validators."""
         active_indices = self.get_active_validator_indices(state, self.get_current_epoch(state))
         return self.get_total_balance(state, set(active_indices))
+
+    def get_unslashed_participating_indices(
+        self, state: BeaconState, flag_index: int, epoch: Epoch
+    ) -> set[ValidatorIndex]:
+        """Return the active, unslashed validators that earned a timeliness flag in an epoch."""
+        assert epoch in (self.get_previous_epoch(state), self.get_current_epoch(state))
+        epoch_participation = (
+            state.current_epoch_participation
+            if epoch == self.get_current_epoch(state)
+            else state.previous_epoch_participation
+        )
+        return {
+            validator_index
+            for validator_index in self.get_active_validator_indices(state, epoch)
+            if self.has_flag(epoch_participation[int(validator_index)], flag_index)
+            and not state.validators[int(validator_index)].slashed
+        }
+
+    def get_eligible_validator_indices(self, state: BeaconState) -> list[ValidatorIndex]:
+        """Return the validators eligible for rewards and penalties this epoch."""
+        previous_epoch = self.get_previous_epoch(state)
+        return [
+            ValidatorIndex(validator_index)
+            for validator_index, validator in enumerate(state.validators)
+            if self.is_active_validator(validator, previous_epoch)
+            or (validator.slashed and int(previous_epoch) + 1 < int(validator.withdrawable_epoch))
+        ]
+
+    def get_finality_delay(self, state: BeaconState) -> Uint64:
+        """Return how many epochs the previous epoch trails the last finalized one."""
+        return Uint64(int(self.get_previous_epoch(state)) - int(state.finalized_checkpoint.epoch))
+
+    def is_in_inactivity_leak(self, state: BeaconState) -> bool:
+        """Check whether finality has stalled long enough to trigger the inactivity leak."""
+        return int(self.get_finality_delay(state)) > int(MIN_EPOCHS_TO_INACTIVITY_PENALTY)
 
     def get_pending_balance_to_withdraw(
         self, state: BeaconState, validator_index: ValidatorIndex

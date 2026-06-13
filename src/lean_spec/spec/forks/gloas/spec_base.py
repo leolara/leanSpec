@@ -317,6 +317,28 @@ class GloasSpecBase(GloasProtocol):
         ...
 
     @abstractmethod
+    def get_unslashed_participating_indices(
+        self, state: BeaconState, flag_index: int, epoch: Epoch
+    ) -> set[ValidatorIndex]:
+        """Return the active, unslashed validators that earned a timeliness flag in an epoch."""
+        ...
+
+    @abstractmethod
+    def get_eligible_validator_indices(self, state: BeaconState) -> list[ValidatorIndex]:
+        """Return the validators eligible for rewards and penalties this epoch."""
+        ...
+
+    @abstractmethod
+    def get_finality_delay(self, state: BeaconState) -> Uint64:
+        """Return how many epochs the previous epoch trails the last finalized one."""
+        ...
+
+    @abstractmethod
+    def is_in_inactivity_leak(self, state: BeaconState) -> bool:
+        """Check whether finality has stalled long enough to trigger the inactivity leak."""
+        ...
+
+    @abstractmethod
     def get_pending_balance_to_withdraw(
         self, state: BeaconState, validator_index: ValidatorIndex
     ) -> Gwei:
