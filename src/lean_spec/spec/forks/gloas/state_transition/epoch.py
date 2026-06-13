@@ -9,6 +9,7 @@ consensus vectors can exercise it in isolation.
 
 from lean_spec.spec.crypto.merkleization import hash_tree_root
 from lean_spec.spec.forks.gloas.config import (
+    EJECTION_BALANCE,
     INACTIVITY_SCORE_BIAS,
     INACTIVITY_SCORE_RECOVERY_RATE,
 )
@@ -35,7 +36,13 @@ from lean_spec.spec.forks.gloas.containers.beacon_chain import (
     Slashings,
     Validators,
 )
-from lean_spec.spec.forks.gloas.containers.primitives import Gwei, ParticipationFlags, Root
+from lean_spec.spec.forks.gloas.containers.primitives import (
+    Epoch,
+    Gwei,
+    ParticipationFlags,
+    Root,
+    ValidatorIndex,
+)
 from lean_spec.spec.forks.gloas.preset import (
     EFFECTIVE_BALANCE_INCREMENT,
     EPOCHS_PER_ETH1_VOTING_PERIOD,
@@ -45,6 +52,7 @@ from lean_spec.spec.forks.gloas.preset import (
     HYSTERESIS_QUOTIENT,
     HYSTERESIS_UPWARD_MULTIPLIER,
     INACTIVITY_PENALTY_QUOTIENT_BELLATRIX,
+    PROPORTIONAL_SLASHING_MULTIPLIER_BELLATRIX,
     SLOTS_PER_EPOCH,
     SLOTS_PER_HISTORICAL_ROOT,
 )
@@ -244,6 +252,58 @@ class EpochMixin(GloasSpecBase):
         return state.model_copy(
             update={"balances": Balances(data=[Gwei(balance) for balance in balances])}
         )
+
+    def process_registry_updates(self, state: BeaconState) -> BeaconState:
+        """Queue eligible validators, eject the underfunded, and activate the ready ones."""
+        current_epoch = self.get_current_epoch(state)
+        activation_epoch = self.compute_activation_exit_epoch(current_epoch)
+        for validator_index in range(len(state.validators)):
+            validator = state.validators[validator_index]
+            if self.is_eligible_for_activation_queue(validator):
+                state = self.replace_validator(
+                    state,
+                    validator_index,
+                    validator.model_copy(
+                        update={"activation_eligibility_epoch": Epoch(int(current_epoch) + 1)}
+                    ),
+                )
+            elif (
+                self.is_active_validator(validator, current_epoch)
+                and validator.effective_balance <= EJECTION_BALANCE
+            ):
+                state = self.initiate_validator_exit(state, ValidatorIndex(validator_index))
+            elif self.is_eligible_for_activation(state, validator):
+                state = self.replace_validator(
+                    state,
+                    validator_index,
+                    validator.model_copy(update={"activation_epoch": activation_epoch}),
+                )
+        return state
+
+    def process_slashings(self, state: BeaconState) -> BeaconState:
+        """Charge the correlated-slashing penalty to validators reaching their midpoint epoch."""
+        epoch = self.get_current_epoch(state)
+        total_balance = int(self.get_total_active_balance(state))
+        # The aggregate slashed balance is scaled, then capped at the total active balance.
+        adjusted_total_slashing_balance = min(
+            sum(int(slashing) for slashing in state.slashings)
+            * int(PROPORTIONAL_SLASHING_MULTIPLIER_BELLATRIX),
+            total_balance,
+        )
+        increment = int(EFFECTIVE_BALANCE_INCREMENT)
+        penalty_per_effective_balance_increment = adjusted_total_slashing_balance // (
+            total_balance // increment
+        )
+        midpoint_offset = _EPOCHS_PER_SLASHINGS_VECTOR // 2
+        for validator_index in range(len(state.validators)):
+            validator = state.validators[validator_index]
+            if validator.slashed and (
+                int(epoch) + midpoint_offset == int(validator.withdrawable_epoch)
+            ):
+                effective_balance_increments = int(validator.effective_balance) // increment
+                penalty = penalty_per_effective_balance_increment * effective_balance_increments
+                state = self.decrease_balance(state, ValidatorIndex(validator_index), Gwei(penalty))
+        return state
 
     def process_eth1_data_reset(self, state: BeaconState) -> BeaconState:
         """Clear the eth1 data vote tally at the end of each voting period."""
