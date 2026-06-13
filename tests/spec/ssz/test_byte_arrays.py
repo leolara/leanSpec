@@ -13,10 +13,17 @@ from lean_spec.spec.ssz.byte_arrays import (
     ZERO_HASH,
     BaseByteList,
     BaseBytes,
+    Bytes1,
     Bytes4,
+    Bytes8,
     Bytes32,
+    Bytes48,
+    Bytes96,
 )
 from lean_spec.spec.ssz.exceptions import SSZSerializationError, SSZTypeError, SSZValueError
+
+NEW_FIXED_BYTE_TYPES = (Bytes1, Bytes8, Bytes48, Bytes96)
+"""Fixed byte-vector types added for the mainnet Gloas port."""
 
 
 class ByteList5(BaseByteList):
@@ -251,6 +258,60 @@ class TestBaseBytesSSZ:
         with pytest.raises(SSZSerializationError) as exception_info:
             Bytes4.deserialize(buffer, 4)
         assert str(exception_info.value) == "Bytes4: expected 4 bytes, got 2"
+
+
+class TestNewFixedByteTypes:
+    """Construction, length, and round-trip of the byte types added for Gloas."""
+
+    @pytest.mark.parametrize(
+        "cls, expected_length",
+        [
+            (Bytes1, 1),
+            (Bytes8, 8),
+            (Bytes48, 48),
+            (Bytes96, 96),
+        ],
+    )
+    def test_declared_length(self, cls: type[BaseBytes], expected_length: int) -> None:
+        """Each new type pins its byte count and reports it through the SSZ interface."""
+        assert cls.LENGTH == expected_length
+        assert cls.get_byte_length() == expected_length
+        assert cls.is_fixed_size() is True
+
+    @pytest.mark.parametrize("cls", NEW_FIXED_BYTE_TYPES)
+    def test_accepts_exact_length(self, cls: type[BaseBytes]) -> None:
+        """A payload of exactly the declared length constructs a bytes-compatible value."""
+        payload = bytes(byte_value % 256 for byte_value in range(cls.LENGTH))
+        byte_array = cls(payload)
+        assert isinstance(byte_array, bytes)
+        assert len(byte_array) == cls.LENGTH
+        assert bytes(byte_array) == payload
+
+    @pytest.mark.parametrize("cls", NEW_FIXED_BYTE_TYPES)
+    def test_wrong_length_raises(self, cls: type[BaseBytes]) -> None:
+        """A payload one byte short raises with the exact declared and actual counts."""
+        too_short = b"\x00" * (cls.LENGTH - 1)
+        expected_message = (
+            f"{cls.__name__} requires exactly {cls.LENGTH} bytes, got {cls.LENGTH - 1}"
+        )
+        with pytest.raises(SSZValueError) as exception_info:
+            cls(too_short)
+        assert str(exception_info.value) == expected_message
+
+    @pytest.mark.parametrize("cls", NEW_FIXED_BYTE_TYPES)
+    def test_encode_decode_roundtrip(self, cls: type[BaseBytes]) -> None:
+        """Each new type round-trips through encode_bytes, decode_bytes, and a stream."""
+        payload = bytes(byte_value % 256 for byte_value in range(cls.LENGTH))
+        byte_array = cls(payload)
+        assert byte_array.encode_bytes() == payload
+        assert cls.decode_bytes(payload) == byte_array
+
+        buffer = io.BytesIO()
+        bytes_written = byte_array.serialize(buffer)
+        assert bytes_written == cls.LENGTH
+
+        buffer.seek(0)
+        assert cls.deserialize(buffer, cls.LENGTH) == byte_array
 
 
 class TestBaseBytesPydantic:

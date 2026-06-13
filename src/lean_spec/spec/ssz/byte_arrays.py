@@ -237,10 +237,22 @@ class BaseBytes(bytes, SSZType):
         return hash((type(self), bytes(self)))
 
 
+class Bytes1(BaseBytes):
+    """Fixed-size byte array of exactly 1 byte."""
+
+    LENGTH = 1
+
+
 class Bytes4(BaseBytes):
     """Fixed-size byte array of exactly 4 bytes."""
 
     LENGTH = 4
+
+
+class Bytes8(BaseBytes):
+    """Fixed-size byte array of exactly 8 bytes."""
+
+    LENGTH = 8
 
 
 class Bytes16(BaseBytes):
@@ -267,6 +279,12 @@ class Bytes33(BaseBytes):
     LENGTH = 33
 
 
+class Bytes48(BaseBytes):
+    """Fixed-size byte array of exactly 48 bytes (BLS public key or KZG commitment)."""
+
+    LENGTH = 48
+
+
 class Bytes52(BaseBytes):
     """Fixed-size byte array of exactly 52 bytes."""
 
@@ -277,6 +295,12 @@ class Bytes64(BaseBytes):
     """Fixed-size byte array of exactly 64 bytes (secp256k1 signature)."""
 
     LENGTH = 64
+
+
+class Bytes96(BaseBytes):
+    """Fixed-size byte array of exactly 96 bytes (BLS signature)."""
+
+    LENGTH = 96
 
 
 ZERO_HASH: Bytes32 = Bytes32.zero()

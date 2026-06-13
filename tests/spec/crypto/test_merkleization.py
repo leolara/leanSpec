@@ -18,12 +18,14 @@ from lean_spec.spec.crypto.merkleization import (
 from lean_spec.spec.ssz import (
     ZERO_HASH,
     BaseByteList,
-    BaseBytes,
     Bytes32,
+    Bytes48,
+    Bytes96,
     Uint8,
     Uint16,
     Uint32,
     Uint64,
+    Uint256,
 )
 from lean_spec.spec.ssz.bitfields import BaseBitlist, BaseBitvector
 from lean_spec.spec.ssz.boolean import Boolean
@@ -180,18 +182,6 @@ def test_zero_tree_root_internal() -> None:
     assert _zero_tree_root(4) == Z[2]
     assert _zero_tree_root(8) == Z[3]
     assert _zero_tree_root(16) == Z[4]
-
-
-class Bytes48(BaseBytes):
-    """Test-local fixed-size byte array of 48 bytes."""
-
-    LENGTH = 48
-
-
-class Bytes96(BaseBytes):
-    """Test-local fixed-size byte array of 96 bytes spanning three chunks."""
-
-    LENGTH = 96
 
 
 class ByteList7(BaseByteList):
@@ -404,10 +394,18 @@ def le_padded(integer_value: int, byte_length: int) -> Bytes32:
         (Uint64, 8, 0x0000000000000000),
         (Uint64, 8, 0x0123456789ABCDEF),
         (Uint64, 8, 0xFFFFFFFFFFFFFFFF),
+        (Uint256, 32, 0x00),
+        (Uint256, 32, 0x01),
+        (Uint256, 32, 0x0123456789ABCDEF),
+        (Uint256, 32, 2**256 - 1),
     ],
 )
 def test_hash_tree_root_uints(uint_type: type, byte_length: int, integer_value: int) -> None:
-    """Unsigned integers hash as their little-endian bytes padded to one chunk."""
+    """Unsigned integers hash as their little-endian bytes padded to one chunk.
+
+    A uint256 already fills exactly one 32-byte chunk, so its root is those bytes
+    verbatim with no padding.
+    """
     assert hash_tree_root(uint_type(integer_value)) == le_padded(integer_value, byte_length)
 
 

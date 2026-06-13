@@ -38,6 +38,8 @@ dependencies = [
     "aioquic>=1.2.0,<2",
     "pyyaml>=6.0.0,<7",
     "prometheus-client>=0.21.0,<1",
+    "milagro-bls-binding>=1.9.0,<2",
+    "py-arkworks-bls12381>=0.4.1,<1",
 ]
 
 [project.license]

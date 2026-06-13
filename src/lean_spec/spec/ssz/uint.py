@@ -372,3 +372,15 @@ class Uint64(BaseUint):
     """A type representing a 64-bit unsigned integer (uint64)."""
 
     BITS = 64
+
+
+class Uint256(BaseUint):
+    """
+    A type representing a 256-bit unsigned integer (uint256).
+
+    Mainnet execution-payload fields such as the base fee per gas span the full
+    256-bit range. Its serialization is 32 little-endian bytes, which is exactly
+    one Merkle chunk, so it merkleizes to those bytes with no padding.
+    """
+
+    BITS = 256
