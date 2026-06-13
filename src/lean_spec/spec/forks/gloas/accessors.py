@@ -30,6 +30,7 @@ from lean_spec.spec.forks.gloas.preset import (
     EFFECTIVE_BALANCE_INCREMENT,
     EPOCHS_PER_HISTORICAL_VECTOR,
     MAX_COMMITTEES_PER_SLOT,
+    MAX_SEED_LOOKAHEAD,
     MIN_SEED_LOOKAHEAD,
     SLOTS_PER_EPOCH,
     SLOTS_PER_HISTORICAL_ROOT,
@@ -51,6 +52,11 @@ def compute_epoch_at_slot(slot: Slot) -> Epoch:
 def compute_start_slot_at_epoch(epoch: Epoch) -> Slot:
     """Return the first slot of an epoch."""
     return Slot(int(epoch) * _SLOTS_PER_EPOCH)
+
+
+def compute_activation_exit_epoch(epoch: Epoch) -> Epoch:
+    """Return the epoch an activation or exit initiated this epoch takes effect."""
+    return Epoch(int(epoch) + 1 + int(MAX_SEED_LOOKAHEAD))
 
 
 def get_current_epoch(state: BeaconState) -> Epoch:

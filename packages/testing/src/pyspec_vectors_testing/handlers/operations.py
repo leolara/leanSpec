@@ -18,10 +18,16 @@ import pytest
 import lean_spec.spec.crypto.bls as bls
 from lean_spec.spec.crypto.merkleization import hash_tree_root
 from lean_spec.spec.forks.gloas.containers.beacon_chain import (
+    AttesterSlashing,
     BeaconState,
+    ProposerSlashing,
     SignedBLSToExecutionChange,
 )
-from lean_spec.spec.forks.gloas.state_transition.operations import process_bls_to_execution_change
+from lean_spec.spec.forks.gloas.state_transition.operations import (
+    process_attester_slashing,
+    process_bls_to_execution_change,
+    process_proposer_slashing,
+)
 from lean_spec.spec.ssz.ssz_base import SSZType
 from pyspec_vectors_testing.decode import bls_is_active, decompress_ssz, load_meta
 
@@ -41,6 +47,16 @@ OPERATION_SPECS: dict[str, OperationSpec] = {
         process=process_bls_to_execution_change,
         container=SignedBLSToExecutionChange,
         file_stem="address_change",
+    ),
+    "proposer_slashing": OperationSpec(
+        process=process_proposer_slashing,
+        container=ProposerSlashing,
+        file_stem="proposer_slashing",
+    ),
+    "attester_slashing": OperationSpec(
+        process=process_attester_slashing,
+        container=AttesterSlashing,
+        file_stem="attester_slashing",
     ),
 }
 
@@ -75,5 +91,8 @@ def run_operations_case(case_dir: Path, handler: str) -> None:
             f"  actual   {actual_root.hex()}"
         )
     else:
-        with pytest.raises(AssertionError):
+        # A case that ships no post-state expects the operation to be rejected.
+        # The upstream runner treats any raised exception as a rejection, since a
+        # bad operation can fail an assert or fault on an out-of-range lookup.
+        with pytest.raises(Exception):  # noqa: B017, PT011
             spec.process(pre_state, operation)

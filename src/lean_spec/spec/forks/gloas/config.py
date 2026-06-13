@@ -9,7 +9,8 @@ and mainnet test networks assign different fork versions and activation epochs.
 
 import os
 
-from lean_spec.spec.forks.gloas.containers.primitives import Epoch, Version
+from lean_spec.spec.forks.gloas.containers.primitives import Epoch, Gwei, Version
+from lean_spec.spec.ssz import Uint64
 
 _PRESET = os.environ.get("GLOAS_PRESET", "mainnet").lower()
 """Active preset, "mainnet" or "minimal", fixed for the whole process."""
@@ -67,3 +68,15 @@ FULU_FORK_EPOCH = _FAR_FUTURE if _MINIMAL else Epoch(411392)
 
 GLOAS_FORK_EPOCH = _FAR_FUTURE
 """Activation epoch of the Gloas upgrade, unscheduled on both test networks."""
+
+MIN_VALIDATOR_WITHDRAWABILITY_DELAY = Epoch(256)
+"""Epochs an exited validator waits before its balance becomes withdrawable."""
+
+MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA = Gwei(64000000000) if _MINIMAL else Gwei(128000000000)
+"""Floor on the per-epoch exit churn, denominated in gwei."""
+
+CHURN_LIMIT_QUOTIENT_GLOAS = Uint64(16) if _MINIMAL else Uint64(32768)
+"""Divisor of total active balance setting the per-epoch exit churn."""
+
+SHARD_COMMITTEE_PERIOD = Uint64(64) if _MINIMAL else Uint64(256)
+"""Epochs a validator must be active before it may request a voluntary exit."""
