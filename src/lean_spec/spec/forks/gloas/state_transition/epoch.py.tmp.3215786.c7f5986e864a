@@ -401,42 +401,6 @@ class EpochMixin(GloasSpecBase):
             update={"pending_consolidations": PendingConsolidations(data=remaining)}
         )
 
-    def process_builder_pending_payments(self, state: BeaconState) -> BeaconState:
-        """Settle last epoch's builder payments that reached quorum, then roll the window."""
-        quorum = self.get_builder_payment_quorum_threshold(state)
-        payments = list(state.builder_pending_payments)
-        withdrawals = list(state.builder_pending_withdrawals)
-        for payment in payments[:_SLOTS_PER_EPOCH]:
-            if int(payment.weight) >= int(quorum):
-                withdrawals.append(payment.withdrawal)
-
-        # Drop the oldest epoch of payments and open a fresh empty epoch at the end.
-        zero_payment = BuilderPendingPayment.decode_bytes(
-            b"\x00" * BuilderPendingPayment.get_byte_length()
-        )
-        rolled_payments = [
-            *payments[_SLOTS_PER_EPOCH:],
-            *[zero_payment for _ in range(_SLOTS_PER_EPOCH)],
-        ]
-        return state.model_copy(
-            update={
-                "builder_pending_withdrawals": BuilderPendingWithdrawals(data=withdrawals),
-                "builder_pending_payments": BuilderPendingPayments(data=rolled_payments),
-            }
-        )
-
-    def process_ptc_window(self, state: BeaconState) -> BeaconState:
-        """Shift the payload timeliness committee window forward and fill the lookahead epoch."""
-        window = list(state.ptc_window)
-        next_epoch = Epoch(int(self.get_current_epoch(state)) + _MIN_SEED_LOOKAHEAD + 1)
-        start_slot = int(self.compute_start_slot_at_epoch(next_epoch))
-        lookahead_committees = [
-            self.compute_ptc(state, Slot(start_slot + slot_offset))
-            for slot_offset in range(_SLOTS_PER_EPOCH)
-        ]
-        rolled_window = [*window[_SLOTS_PER_EPOCH:], *lookahead_committees]
-        return state.model_copy(update={"ptc_window": PtcWindow(data=rolled_window)})
-
     def process_eth1_data_reset(self, state: BeaconState) -> BeaconState:
         """Clear the eth1 data vote tally at the end of each voting period."""
         next_epoch = int(self.get_current_epoch(state)) + 1

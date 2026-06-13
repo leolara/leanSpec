@@ -30,6 +30,7 @@ from lean_spec.spec.forks.gloas.containers.beacon_chain import (
     PendingDeposit,
     PendingDeposits,
     ProposerSlashing,
+    PtcWindowElement,
     SignedBLSToExecutionChange,
     SignedExecutionPayloadBid,
     SignedVoluntaryExit,
@@ -371,6 +372,16 @@ class GloasSpecBase(GloasProtocol):
     @abstractmethod
     def get_activation_churn_limit(self, state: BeaconState) -> Gwei:
         """Return the per-epoch activation churn, floored, rounded, and capped."""
+        ...
+
+    @abstractmethod
+    def compute_ptc(self, state: BeaconState, slot: Slot) -> PtcWindowElement:
+        """Sample the payload timeliness committee for a slot, balance-weighted with duplicates."""
+        ...
+
+    @abstractmethod
+    def get_builder_payment_quorum_threshold(self, state: BeaconState) -> Uint64:
+        """Return the per-slot weight a builder payment must reach to be honored."""
         ...
 
     @abstractmethod

@@ -23,7 +23,10 @@ from lean_spec.spec.forks.gloas.config import (
     BlobParameters,
 )
 from lean_spec.spec.forks.gloas.constants import (
+    BUILDER_PAYMENT_THRESHOLD_DENOMINATOR,
+    BUILDER_PAYMENT_THRESHOLD_NUMERATOR,
     DOMAIN_BEACON_ATTESTER,
+    DOMAIN_PTC_ATTESTER,
     FAR_FUTURE_EPOCH,
     GENESIS_EPOCH,
     TIMELY_HEAD_FLAG_INDEX,
@@ -56,8 +59,12 @@ from lean_spec.spec.forks.gloas.containers.primitives import (
     ValidatorIndex,
     WithdrawalIndex,
 )
-from lean_spec.spec.forks.gloas.helpers.math import integer_squareroot, uint64_to_bytes
-from lean_spec.spec.forks.gloas.helpers.shuffle import compute_committee
+from lean_spec.spec.forks.gloas.helpers.math import (
+    bytes_to_uint64,
+    integer_squareroot,
+    uint64_to_bytes,
+)
+from lean_spec.spec.forks.gloas.helpers.shuffle import compute_committee, compute_shuffled_index
 from lean_spec.spec.forks.gloas.helpers.withdrawals import ExpectedWithdrawals
 from lean_spec.spec.forks.gloas.preset import (
     BASE_REWARD_FACTOR,
@@ -65,6 +72,7 @@ from lean_spec.spec.forks.gloas.preset import (
     EPOCHS_PER_HISTORICAL_VECTOR,
     MAX_BUILDERS_PER_WITHDRAWALS_SWEEP,
     MAX_COMMITTEES_PER_SLOT,
+    MAX_EFFECTIVE_BALANCE_ELECTRA,
     MAX_PENDING_PARTIALS_PER_WITHDRAWALS_SWEEP,
     MAX_SEED_LOOKAHEAD,
     MAX_VALIDATORS_PER_WITHDRAWALS_SWEEP,
@@ -73,6 +81,7 @@ from lean_spec.spec.forks.gloas.preset import (
     MIN_ATTESTATION_INCLUSION_DELAY,
     MIN_EPOCHS_TO_INACTIVITY_PENALTY,
     MIN_SEED_LOOKAHEAD,
+    PTC_SIZE,
     SLOTS_PER_EPOCH,
     SLOTS_PER_HISTORICAL_ROOT,
     TARGET_COMMITTEE_SIZE,
@@ -220,6 +229,66 @@ class AccessorMixin(GloasSpecBase):
         )
         rounded_churn = churn - churn % int(EFFECTIVE_BALANCE_INCREMENT)
         return Gwei(min(int(MAX_PER_EPOCH_ACTIVATION_CHURN_LIMIT_GLOAS), rounded_churn))
+
+    def compute_balance_weighted_selection(
+        self,
+        state: BeaconState,
+        indices: Sequence[ValidatorIndex],
+        seed: Bytes32,
+        size: Uint64,
+        shuffle_indices: bool,
+    ) -> list[ValidatorIndex]:
+        """Sample candidate indices by effective balance, possibly with duplicates."""
+        max_random_value = 2**16 - 1
+        total = len(indices)
+        assert total > 0
+        effective_balances = [
+            int(state.validators[int(index)].effective_balance) for index in indices
+        ]
+        selected: list[ValidatorIndex] = []
+        sample = 0
+        random_bytes = b""
+        while len(selected) < int(size):
+            offset = sample % 16 * 2
+            if offset == 0:
+                random_bytes = sha256(bytes(seed) + uint64_to_bytes(Uint64(sample // 16))).digest()
+            candidate_position = sample % total
+            if shuffle_indices:
+                candidate_position = int(
+                    compute_shuffled_index(Uint64(candidate_position), Uint64(total), seed)
+                )
+            weight = effective_balances[candidate_position] * max_random_value
+            random_value = int(bytes_to_uint64(random_bytes[offset : offset + 2]))
+            threshold = int(MAX_EFFECTIVE_BALANCE_ELECTRA) * random_value
+            if weight >= threshold:
+                selected.append(indices[candidate_position])
+            sample += 1
+        return selected
+
+    def compute_ptc(self, state: BeaconState, slot: Slot) -> PtcWindowElement:
+        """Sample the payload timeliness committee for a slot, balance-weighted with duplicates."""
+        epoch = self.compute_epoch_at_slot(slot)
+        seed = Bytes32(
+            sha256(
+                bytes(self.get_seed(state, epoch, DOMAIN_PTC_ATTESTER)) + uint64_to_bytes(slot)
+            ).digest()
+        )
+        committee_indices: list[ValidatorIndex] = []
+        for committee_index in range(int(self.get_committee_count_per_slot(state, epoch))):
+            committee_indices.extend(
+                self.get_beacon_committee(state, slot, CommitteeIndex(committee_index))
+            )
+        return PtcWindowElement(
+            data=self.compute_balance_weighted_selection(
+                state, committee_indices, seed, PTC_SIZE, shuffle_indices=False
+            )
+        )
+
+    def get_builder_payment_quorum_threshold(self, state: BeaconState) -> Uint64:
+        """Return the per-slot weight a builder payment must reach to be honored."""
+        per_slot_balance = int(self.get_total_active_balance(state)) // _SLOTS_PER_EPOCH
+        quorum = per_slot_balance * int(BUILDER_PAYMENT_THRESHOLD_NUMERATOR)
+        return Uint64(quorum // int(BUILDER_PAYMENT_THRESHOLD_DENOMINATOR))
 
     def get_unslashed_participating_indices(
         self, state: BeaconState, flag_index: int, epoch: Epoch
