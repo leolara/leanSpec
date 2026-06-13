@@ -14,6 +14,7 @@ from lean_spec.spec.forks.gloas.config import (
     INACTIVITY_SCORE_RECOVERY_RATE,
 )
 from lean_spec.spec.forks.gloas.constants import (
+    FAR_FUTURE_EPOCH,
     GENESIS_EPOCH,
     JUSTIFICATION_BITS_LENGTH,
     PARTICIPATION_FLAG_WEIGHTS,
@@ -31,6 +32,8 @@ from lean_spec.spec.forks.gloas.containers.beacon_chain import (
     HistoricalSummary,
     InactivityScores,
     JustificationBits,
+    PendingConsolidations,
+    PendingDeposits,
     PreviousEpochParticipation,
     RandaoMixes,
     Slashings,
@@ -52,6 +55,7 @@ from lean_spec.spec.forks.gloas.preset import (
     HYSTERESIS_QUOTIENT,
     HYSTERESIS_UPWARD_MULTIPLIER,
     INACTIVITY_PENALTY_QUOTIENT_BELLATRIX,
+    MAX_PENDING_DEPOSITS_PER_EPOCH,
     PROPORTIONAL_SLASHING_MULTIPLIER_BELLATRIX,
     SLOTS_PER_EPOCH,
     SLOTS_PER_HISTORICAL_ROOT,
@@ -304,6 +308,91 @@ class EpochMixin(GloasSpecBase):
                 penalty = penalty_per_effective_balance_increment * effective_balance_increments
                 state = self.decrease_balance(state, ValidatorIndex(validator_index), Gwei(penalty))
         return state
+
+    def process_pending_deposits(self, state: BeaconState) -> BeaconState:
+        """Drain finalized pending deposits up to the activation churn and per-epoch cap."""
+        next_epoch = int(self.get_current_epoch(state)) + 1
+        available_for_processing = int(state.deposit_balance_to_consume) + int(
+            self.get_activation_churn_limit(state)
+        )
+        processed_amount = 0
+        next_deposit_index = 0
+        deposits_to_postpone = []
+        is_churn_limit_reached = False
+        finalized_slot = int(self.compute_start_slot_at_epoch(state.finalized_checkpoint.epoch))
+
+        for deposit in state.pending_deposits:
+            # Stop at the first unfinalized deposit, or once the per-epoch cap is hit.
+            if int(deposit.slot) > finalized_slot:
+                break
+            if next_deposit_index >= int(MAX_PENDING_DEPOSITS_PER_EPOCH):
+                break
+
+            is_validator_exited = False
+            is_validator_withdrawn = False
+            validator_public_keys = [validator.public_key for validator in state.validators]
+            if deposit.public_key in validator_public_keys:
+                validator = state.validators[validator_public_keys.index(deposit.public_key)]
+                is_validator_exited = int(validator.exit_epoch) < int(FAR_FUTURE_EPOCH)
+                is_validator_withdrawn = int(validator.withdrawable_epoch) < next_epoch
+
+            if is_validator_withdrawn:
+                # A withdrawn validator can never reactivate, so credit without consuming churn.
+                state = self.apply_pending_deposit(state, deposit)
+            elif is_validator_exited:
+                # An exiting validator's deposit waits until after it becomes withdrawable.
+                deposits_to_postpone.append(deposit)
+            else:
+                is_churn_limit_reached = (
+                    processed_amount + int(deposit.amount) > available_for_processing
+                )
+                if is_churn_limit_reached:
+                    break
+                processed_amount += int(deposit.amount)
+                state = self.apply_pending_deposit(state, deposit)
+
+            next_deposit_index += 1
+
+        remaining = [*list(state.pending_deposits)[next_deposit_index:], *deposits_to_postpone]
+        # Carry leftover churn budget only when the limit stopped processing.
+        deposit_balance_to_consume = (
+            available_for_processing - processed_amount if is_churn_limit_reached else 0
+        )
+        return state.model_copy(
+            update={
+                "pending_deposits": PendingDeposits(data=remaining),
+                "deposit_balance_to_consume": Gwei(deposit_balance_to_consume),
+            }
+        )
+
+    def process_pending_consolidations(self, state: BeaconState) -> BeaconState:
+        """Settle matured consolidations, moving each source's active balance to its target."""
+        next_epoch = int(self.get_current_epoch(state)) + 1
+        processed_count = 0
+        for pending_consolidation in state.pending_consolidations:
+            source_index = pending_consolidation.source_index
+            source_validator = state.validators[int(source_index)]
+            # A slashed source is dropped without moving any balance.
+            if source_validator.slashed:
+                processed_count += 1
+                continue
+            # Stop at the first source that has not yet become withdrawable.
+            if int(source_validator.withdrawable_epoch) > next_epoch:
+                break
+
+            source_effective_balance = min(
+                int(state.balances[int(source_index)]), int(source_validator.effective_balance)
+            )
+            state = self.decrease_balance(state, source_index, Gwei(source_effective_balance))
+            state = self.increase_balance(
+                state, pending_consolidation.target_index, Gwei(source_effective_balance)
+            )
+            processed_count += 1
+
+        remaining = list(state.pending_consolidations)[processed_count:]
+        return state.model_copy(
+            update={"pending_consolidations": PendingConsolidations(data=remaining)}
+        )
 
     def process_eth1_data_reset(self, state: BeaconState) -> BeaconState:
         """Clear the eth1 data vote tally at the end of each voting period."""

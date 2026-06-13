@@ -91,6 +91,9 @@ CONSOLIDATION_CHURN_LIMIT_QUOTIENT = Uint64(32) if _MINIMAL else Uint64(65536)
 EJECTION_BALANCE = Gwei(16000000000)
 """Effective-balance floor below which an active validator is force-exited."""
 
+MAX_PER_EPOCH_ACTIVATION_CHURN_LIMIT_GLOAS = Gwei(128000000000) if _MINIMAL else Gwei(256000000000)
+"""Ceiling on the per-epoch activation churn, in gwei."""
+
 INACTIVITY_SCORE_BIAS = Uint64(4)
 """Per-epoch inactivity-score increase for a validator that misses the target."""
 

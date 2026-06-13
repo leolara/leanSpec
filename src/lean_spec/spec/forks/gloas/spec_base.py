@@ -27,6 +27,7 @@ from lean_spec.spec.forks.gloas.containers.beacon_chain import (
     IndexedAttestation,
     IndexedPayloadAttestation,
     PayloadAttestation,
+    PendingDeposit,
     PendingDeposits,
     ProposerSlashing,
     SignedBLSToExecutionChange,
@@ -363,6 +364,16 @@ class GloasSpecBase(GloasProtocol):
         ...
 
     @abstractmethod
+    def get_index_for_new_validator(self, state: BeaconState) -> ValidatorIndex:
+        """Return the registry index a newly deposited validator will occupy."""
+        ...
+
+    @abstractmethod
+    def get_activation_churn_limit(self, state: BeaconState) -> Gwei:
+        """Return the per-epoch activation churn, floored, rounded, and capped."""
+        ...
+
+    @abstractmethod
     def get_pending_balance_to_withdraw_for_builder(
         self, state: BeaconState, builder_index: BuilderIndex
     ) -> Gwei:
@@ -531,6 +542,11 @@ class GloasSpecBase(GloasProtocol):
         slot: Slot,
     ) -> BeaconState:
         """Register a new builder from a valid deposit, or top up an existing one."""
+        ...
+
+    @abstractmethod
+    def apply_pending_deposit(self, state: BeaconState, deposit: PendingDeposit) -> BeaconState:
+        """Register a new validator from a valid deposit, or top up an existing one."""
         ...
 
     @abstractmethod

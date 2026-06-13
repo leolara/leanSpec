@@ -15,8 +15,11 @@ from hashlib import sha256
 
 from lean_spec.spec.forks.gloas.config import (
     BLOB_SCHEDULE,
+    CHURN_LIMIT_QUOTIENT_GLOAS,
     ELECTRA_FORK_EPOCH,
     MAX_BLOBS_PER_BLOCK_ELECTRA,
+    MAX_PER_EPOCH_ACTIVATION_CHURN_LIMIT_GLOAS,
+    MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA,
     BlobParameters,
 )
 from lean_spec.spec.forks.gloas.constants import (
@@ -204,6 +207,19 @@ class AccessorMixin(GloasSpecBase):
         """Return the summed effective balance of the currently active validators."""
         active_indices = self.get_active_validator_indices(state, self.get_current_epoch(state))
         return self.get_total_balance(state, set(active_indices))
+
+    def get_index_for_new_validator(self, state: BeaconState) -> ValidatorIndex:
+        """Return the registry index a newly deposited validator will occupy."""
+        return ValidatorIndex(len(state.validators))
+
+    def get_activation_churn_limit(self, state: BeaconState) -> Gwei:
+        """Return the per-epoch activation churn, floored, rounded, and capped."""
+        churn = max(
+            int(MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA),
+            int(self.get_total_active_balance(state)) // int(CHURN_LIMIT_QUOTIENT_GLOAS),
+        )
+        rounded_churn = churn - churn % int(EFFECTIVE_BALANCE_INCREMENT)
+        return Gwei(min(int(MAX_PER_EPOCH_ACTIVATION_CHURN_LIMIT_GLOAS), rounded_churn))
 
     def get_unslashed_participating_indices(
         self, state: BeaconState, flag_index: int, epoch: Epoch

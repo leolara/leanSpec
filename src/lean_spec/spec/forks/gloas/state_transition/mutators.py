@@ -32,12 +32,15 @@ from lean_spec.spec.forks.gloas.containers.beacon_chain import (
     BuilderPendingWithdrawal,
     BuilderPendingWithdrawals,
     Builders,
+    CurrentEpochParticipation,
     ExecutionPayloadAvailability,
     ExecutionRequests,
+    InactivityScores,
     PayloadExpectedWithdrawals,
     PendingDeposit,
     PendingDeposits,
     PendingPartialWithdrawals,
+    PreviousEpochParticipation,
     Slashings,
     Validator,
     Validators,
@@ -50,6 +53,7 @@ from lean_spec.spec.forks.gloas.containers.primitives import (
     Epoch,
     ExecutionAddress,
     Gwei,
+    ParticipationFlags,
     Slot,
     ValidatorIndex,
     WithdrawalIndex,
@@ -349,6 +353,68 @@ class MutatorMixin(GloasSpecBase):
         )
         builders[builder_index] = topped_up
         return state.model_copy(update={"builders": Builders(data=builders)})
+
+    def get_validator_from_deposit(
+        self, public_key: BLSPubkey, withdrawal_credentials: Bytes32, amount: Gwei
+    ) -> Validator:
+        """Build a fresh, inactive validator funded by a deposit, with rounded effective balance."""
+        validator = Validator(
+            public_key=public_key,
+            withdrawal_credentials=withdrawal_credentials,
+            effective_balance=Gwei(0),
+            slashed=Boolean(False),
+            activation_eligibility_epoch=FAR_FUTURE_EPOCH,
+            activation_epoch=FAR_FUTURE_EPOCH,
+            exit_epoch=FAR_FUTURE_EPOCH,
+            withdrawable_epoch=FAR_FUTURE_EPOCH,
+        )
+        max_effective_balance = int(self.get_max_effective_balance(validator))
+        effective_balance = min(
+            int(amount) - int(amount) % int(EFFECTIVE_BALANCE_INCREMENT), max_effective_balance
+        )
+        return validator.model_copy(update={"effective_balance": Gwei(effective_balance)})
+
+    def add_validator_to_registry(
+        self,
+        state: BeaconState,
+        public_key: BLSPubkey,
+        withdrawal_credentials: Bytes32,
+        amount: Gwei,
+    ) -> BeaconState:
+        """Append a new validator and its parallel balance, participation, and score entries."""
+        validator = self.get_validator_from_deposit(public_key, withdrawal_credentials, amount)
+        return state.model_copy(
+            update={
+                "validators": Validators(data=[*list(state.validators), validator]),
+                "balances": Balances(data=[*list(state.balances), amount]),
+                "previous_epoch_participation": PreviousEpochParticipation(
+                    data=[*list(state.previous_epoch_participation), ParticipationFlags(0)]
+                ),
+                "current_epoch_participation": CurrentEpochParticipation(
+                    data=[*list(state.current_epoch_participation), ParticipationFlags(0)]
+                ),
+                "inactivity_scores": InactivityScores(
+                    data=[*list(state.inactivity_scores), Uint64(0)]
+                ),
+            }
+        )
+
+    def apply_pending_deposit(self, state: BeaconState, deposit: PendingDeposit) -> BeaconState:
+        """Register a new validator from a valid deposit, or top up an existing one."""
+        validator_public_keys = [validator.public_key for validator in state.validators]
+        if deposit.public_key not in validator_public_keys:
+            if self.is_valid_deposit_signature(
+                deposit.public_key,
+                deposit.withdrawal_credentials,
+                deposit.amount,
+                deposit.signature,
+            ):
+                return self.add_validator_to_registry(
+                    state, deposit.public_key, deposit.withdrawal_credentials, deposit.amount
+                )
+            return state
+        validator_index = ValidatorIndex(validator_public_keys.index(deposit.public_key))
+        return self.increase_balance(state, validator_index, deposit.amount)
 
     def apply_withdrawals(
         self, state: BeaconState, withdrawals: Sequence[Withdrawal]

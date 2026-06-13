@@ -22,6 +22,12 @@ from lean_spec.spec.forks.gloas.containers.beacon_chain import BeaconState
 from lean_spec.spec.forks.gloas.spec import GloasSpec
 from pyspec_vectors_testing.decode import bls_is_active, decompress_ssz, load_meta
 
+# A few handler suites exercise one sub-transition under a name that is not its
+# method name; map those to the method they drive.
+HANDLER_METHOD_OVERRIDES: dict[str, str] = {
+    "pending_deposits_churn": "process_pending_deposits",
+}
+
 
 def run_epoch_processing_case(case_dir: Path, handler: str) -> None:
     """
@@ -31,7 +37,7 @@ def run_epoch_processing_case(case_dir: Path, handler: str) -> None:
         AssertionError: If the post-state root differs, or an aborted case does not raise.
     """
     spec = GloasSpec()
-    method_name = f"process_{handler}"
+    method_name = HANDLER_METHOD_OVERRIDES.get(handler, f"process_{handler}")
     if not hasattr(spec, method_name):
         pytest.skip(f"epoch_processing handler not yet supported: {handler}")
     process = getattr(spec, method_name)
