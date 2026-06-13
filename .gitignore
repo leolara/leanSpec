@@ -171,3 +171,4 @@ clients/
 
 # Local agent worktrees
 .claude/worktrees/
+.gloas-oracle/
