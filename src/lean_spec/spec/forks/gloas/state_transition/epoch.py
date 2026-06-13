@@ -15,9 +15,13 @@ from lean_spec.spec.forks.gloas.config import (
 from lean_spec.spec.forks.gloas.constants import (
     GENESIS_EPOCH,
     JUSTIFICATION_BITS_LENGTH,
+    PARTICIPATION_FLAG_WEIGHTS,
+    TIMELY_HEAD_FLAG_INDEX,
     TIMELY_TARGET_FLAG_INDEX,
+    WEIGHT_DENOMINATOR,
 )
 from lean_spec.spec.forks.gloas.containers.beacon_chain import (
+    Balances,
     BeaconState,
     Checkpoint,
     CurrentEpochParticipation,
@@ -40,6 +44,7 @@ from lean_spec.spec.forks.gloas.preset import (
     HYSTERESIS_DOWNWARD_MULTIPLIER,
     HYSTERESIS_QUOTIENT,
     HYSTERESIS_UPWARD_MULTIPLIER,
+    INACTIVITY_PENALTY_QUOTIENT_BELLATRIX,
     SLOTS_PER_EPOCH,
     SLOTS_PER_HISTORICAL_ROOT,
 )
@@ -157,6 +162,87 @@ class EpochMixin(GloasSpecBase):
             inactivity_scores[position] = Uint64(score)
         return state.model_copy(
             update={"inactivity_scores": InactivityScores(data=inactivity_scores)}
+        )
+
+    def get_flag_index_deltas(
+        self, state: BeaconState, flag_index: int
+    ) -> tuple[list[Gwei], list[Gwei]]:
+        """Return the per-validator rewards and penalties for one timeliness flag."""
+        rewards = [Gwei(0)] * len(state.validators)
+        penalties = [Gwei(0)] * len(state.validators)
+        previous_epoch = self.get_previous_epoch(state)
+        unslashed_participating_indices = self.get_unslashed_participating_indices(
+            state, flag_index, previous_epoch
+        )
+        weight = int(PARTICIPATION_FLAG_WEIGHTS[flag_index])
+        unslashed_participating_increments = int(
+            self.get_total_balance(state, unslashed_participating_indices)
+        ) // int(EFFECTIVE_BALANCE_INCREMENT)
+        active_increments = int(self.get_total_active_balance(state)) // int(
+            EFFECTIVE_BALANCE_INCREMENT
+        )
+        in_inactivity_leak = self.is_in_inactivity_leak(state)
+        for validator_index in self.get_eligible_validator_indices(state):
+            position = int(validator_index)
+            base_reward = int(self.get_base_reward(state, validator_index))
+            if validator_index in unslashed_participating_indices:
+                # During a leak no positive rewards are paid, only penalties accrue.
+                if not in_inactivity_leak:
+                    reward_numerator = base_reward * weight * unslashed_participating_increments
+                    rewards[position] = Gwei(
+                        int(rewards[position])
+                        + reward_numerator // (active_increments * int(WEIGHT_DENOMINATOR))
+                    )
+            elif flag_index != TIMELY_HEAD_FLAG_INDEX:
+                # A missed head is never penalized, since heads can be legitimately reorged.
+                penalties[position] = Gwei(
+                    int(penalties[position]) + base_reward * weight // int(WEIGHT_DENOMINATOR)
+                )
+        return rewards, penalties
+
+    def get_inactivity_penalty_deltas(self, state: BeaconState) -> tuple[list[Gwei], list[Gwei]]:
+        """Return the per-validator inactivity penalties scaled by each validator's score."""
+        rewards = [Gwei(0)] * len(state.validators)
+        penalties = [Gwei(0)] * len(state.validators)
+        matching_target_indices = self.get_unslashed_participating_indices(
+            state, TIMELY_TARGET_FLAG_INDEX, self.get_previous_epoch(state)
+        )
+        penalty_denominator = int(INACTIVITY_SCORE_BIAS) * int(
+            INACTIVITY_PENALTY_QUOTIENT_BELLATRIX
+        )
+        for validator_index in self.get_eligible_validator_indices(state):
+            position = int(validator_index)
+            if validator_index not in matching_target_indices:
+                penalty_numerator = int(state.validators[position].effective_balance) * int(
+                    state.inactivity_scores[position]
+                )
+                penalties[position] = Gwei(
+                    int(penalties[position]) + penalty_numerator // penalty_denominator
+                )
+        return rewards, penalties
+
+    def process_rewards_and_penalties(self, state: BeaconState) -> BeaconState:
+        """Apply the timeliness-flag and inactivity deltas to every validator's balance."""
+        # Rewards are paid for the previous epoch's work, of which genesis has none.
+        if self.get_current_epoch(state) == GENESIS_EPOCH:
+            return state
+
+        flag_deltas = [
+            self.get_flag_index_deltas(state, flag_index)
+            for flag_index in range(len(PARTICIPATION_FLAG_WEIGHTS))
+        ]
+        deltas = [*flag_deltas, self.get_inactivity_penalty_deltas(state)]
+
+        # Fold every delta into a working balance list in order; a decrease floors at zero.
+        balances = [int(balance) for balance in state.balances]
+        for rewards, penalties in deltas:
+            for validator_index in range(len(state.validators)):
+                balances[validator_index] += int(rewards[validator_index])
+                balances[validator_index] = max(
+                    0, balances[validator_index] - int(penalties[validator_index])
+                )
+        return state.model_copy(
+            update={"balances": Balances(data=[Gwei(balance) for balance in balances])}
         )
 
     def process_eth1_data_reset(self, state: BeaconState) -> BeaconState:
