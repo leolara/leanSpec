@@ -12,6 +12,12 @@ wrapped back into its domain type.
 
 from hashlib import sha256
 
+from lean_spec.spec.forks.gloas.config import (
+    BLOB_SCHEDULE,
+    ELECTRA_FORK_EPOCH,
+    MAX_BLOBS_PER_BLOCK_ELECTRA,
+    BlobParameters,
+)
 from lean_spec.spec.forks.gloas.constants import (
     DOMAIN_BEACON_ATTESTER,
     FAR_FUTURE_EPOCH,
@@ -81,6 +87,16 @@ class AccessorMixin(GloasSpecBase):
     def compute_activation_exit_epoch(self, epoch: Epoch) -> Epoch:
         """Return the epoch an activation or exit initiated this epoch takes effect."""
         return Epoch(int(epoch) + 1 + int(MAX_SEED_LOOKAHEAD))
+
+    def get_blob_parameters(self, epoch: Epoch) -> BlobParameters:
+        """Return the blob ceiling active at an epoch from the configured schedule."""
+        # Walk the schedule newest-first and take the first bump already activated.
+        for scheduled in sorted(BLOB_SCHEDULE, key=lambda entry: int(entry.epoch), reverse=True):
+            if int(epoch) >= int(scheduled.epoch):
+                return scheduled
+        return BlobParameters(
+            epoch=ELECTRA_FORK_EPOCH, max_blobs_per_block=MAX_BLOBS_PER_BLOCK_ELECTRA
+        )
 
     def get_current_epoch(self, state: BeaconState) -> Epoch:
         """Return the epoch the state is currently in."""

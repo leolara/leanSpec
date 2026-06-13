@@ -12,6 +12,7 @@ from lean_spec.spec.forks.gloas.constants import (
     BUILDER_WITHDRAWAL_PREFIX,
     COMPOUNDING_WITHDRAWAL_PREFIX,
     DOMAIN_BEACON_ATTESTER,
+    DOMAIN_BEACON_BUILDER,
     DOMAIN_DEPOSIT,
     DOMAIN_PTC_ATTESTER,
     ETH1_ADDRESS_WITHDRAWAL_PREFIX,
@@ -24,6 +25,7 @@ from lean_spec.spec.forks.gloas.containers.beacon_chain import (
     IndexedAttestation,
     IndexedPayloadAttestation,
     PendingDeposits,
+    SignedExecutionPayloadBid,
     Validator,
 )
 from lean_spec.spec.forks.gloas.containers.primitives import (
@@ -34,7 +36,11 @@ from lean_spec.spec.forks.gloas.containers.primitives import (
     Gwei,
     ValidatorIndex,
 )
-from lean_spec.spec.forks.gloas.preset import MAX_EFFECTIVE_BALANCE_ELECTRA, MIN_ACTIVATION_BALANCE
+from lean_spec.spec.forks.gloas.preset import (
+    MAX_EFFECTIVE_BALANCE_ELECTRA,
+    MIN_ACTIVATION_BALANCE,
+    MIN_DEPOSIT_AMOUNT,
+)
 from lean_spec.spec.forks.gloas.spec_base import GloasSpecBase
 from lean_spec.spec.ssz import Bytes32
 
@@ -189,6 +195,29 @@ class PredicatesMixin(GloasSpecBase):
         )
         signing_root = self.compute_signing_root(payload_attestation.data, domain)
         return bls.FastAggregateVerify(public_keys, signing_root, payload_attestation.signature)
+
+    def can_builder_cover_bid(
+        self, state: BeaconState, builder_index: BuilderIndex, bid_amount: Gwei
+    ) -> bool:
+        """Check a builder can fund a bid above its minimum-deposit and queued-withdrawal floor."""
+        builder_balance = int(state.builders[int(builder_index)].balance)
+        pending_withdrawals_amount = int(
+            self.get_pending_balance_to_withdraw_for_builder(state, builder_index)
+        )
+        minimum_balance = int(MIN_DEPOSIT_AMOUNT) + pending_withdrawals_amount
+        if builder_balance < minimum_balance:
+            return False
+        return builder_balance - minimum_balance >= int(bid_amount)
+
+    def verify_execution_payload_bid_signature(
+        self, state: BeaconState, signed_bid: SignedExecutionPayloadBid
+    ) -> bool:
+        """Check a bid is signed by the builder it names."""
+        builder = state.builders[int(signed_bid.message.builder_index)]
+        signing_root = self.compute_signing_root(
+            signed_bid.message, self.get_domain(state, DOMAIN_BEACON_BUILDER)
+        )
+        return bls.Verify(builder.public_key, signing_root, signed_bid.signature)
 
     def is_valid_deposit_signature(
         self,

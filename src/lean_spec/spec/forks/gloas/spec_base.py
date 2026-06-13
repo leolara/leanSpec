@@ -12,6 +12,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import ClassVar
 
+from lean_spec.spec.forks.gloas.config import BlobParameters
 from lean_spec.spec.forks.gloas.containers.beacon_chain import (
     Attestation,
     AttestationData,
@@ -26,6 +27,7 @@ from lean_spec.spec.forks.gloas.containers.beacon_chain import (
     PendingDeposits,
     ProposerSlashing,
     SignedBLSToExecutionChange,
+    SignedExecutionPayloadBid,
     SignedVoluntaryExit,
     Validator,
     WithdrawalRequest,
@@ -200,6 +202,20 @@ class GloasSpecBase(GloasProtocol):
         ...
 
     @abstractmethod
+    def can_builder_cover_bid(
+        self, state: BeaconState, builder_index: BuilderIndex, bid_amount: Gwei
+    ) -> bool:
+        """Check a builder can fund a bid above its minimum-deposit and queued-withdrawal floor."""
+        ...
+
+    @abstractmethod
+    def verify_execution_payload_bid_signature(
+        self, state: BeaconState, signed_bid: SignedExecutionPayloadBid
+    ) -> bool:
+        """Check a bid is signed by the builder it names."""
+        ...
+
+    @abstractmethod
     def compute_epoch_at_slot(self, slot: Slot) -> Epoch:
         """Return the epoch a slot falls in."""
         ...
@@ -217,6 +233,11 @@ class GloasSpecBase(GloasProtocol):
     @abstractmethod
     def get_current_epoch(self, state: BeaconState) -> Epoch:
         """Return the epoch the state is currently in."""
+        ...
+
+    @abstractmethod
+    def get_blob_parameters(self, epoch: Epoch) -> BlobParameters:
+        """Return the blob ceiling active at an epoch from the configured schedule."""
         ...
 
     @abstractmethod

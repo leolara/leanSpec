@@ -85,7 +85,7 @@ class SignatureMixin(GloasSpecBase):
         """
         # The current epoch is the state slot divided by the slots-per-epoch span.
         # This inlines the epoch accessor that the state-transition phase introduces.
-        current_epoch = Epoch(state.slot // SLOTS_PER_EPOCH) if epoch is None else epoch
+        current_epoch = Epoch(int(state.slot) // int(SLOTS_PER_EPOCH)) if epoch is None else epoch
         fork_version = (
             state.fork.previous_version
             if current_epoch < state.fork.epoch

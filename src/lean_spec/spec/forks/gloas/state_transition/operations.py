@@ -17,12 +17,14 @@ from lean_spec.spec.forks.gloas.config import (
 )
 from lean_spec.spec.forks.gloas.constants import (
     BLS_WITHDRAWAL_PREFIX,
+    BUILDER_INDEX_SELF_BUILD,
     DOMAIN_BEACON_PROPOSER,
     DOMAIN_BLS_TO_EXECUTION_CHANGE,
     DOMAIN_VOLUNTARY_EXIT,
     ETH1_ADDRESS_WITHDRAWAL_PREFIX,
     FAR_FUTURE_EPOCH,
     FULL_EXIT_REQUEST_AMOUNT,
+    G2_POINT_AT_INFINITY,
     PARTICIPATION_FLAG_WEIGHTS,
     PROPOSER_WEIGHT,
     WEIGHT_DENOMINATOR,
@@ -35,6 +37,7 @@ from lean_spec.spec.forks.gloas.containers.beacon_chain import (
     BeaconState,
     BuilderPendingPayment,
     BuilderPendingPayments,
+    BuilderPendingWithdrawal,
     ConsolidationRequest,
     DepositRequest,
     PayloadAttestation,
@@ -567,3 +570,57 @@ class OperationMixin(GloasSpecBase):
         )
         assert self.is_valid_indexed_payload_attestation(state, indexed_payload_attestation)
         return state
+
+    def process_execution_payload_bid(self, state: BeaconState, block: BeaconBlock) -> BeaconState:
+        """
+        Validate and record the winning execution payload bid for a block.
+
+        A self-build bid must be unpriced and carry the infinity signature. A builder
+        bid must come from an active builder that can fund the bid, with a valid
+        signature. The bid must commit to the current slot, the parent block, and the
+        current randao. A priced bid is queued as a pending builder payment.
+
+        Raises:
+            AssertionError: If the bid is mispriced, mistimed, unfunded, or fails to verify.
+        """
+        signed_bid = block.body.signed_execution_payload_bid
+        bid = signed_bid.message
+        builder_index = bid.builder_index
+        amount = bid.value
+
+        # A self-build is unpriced and signed with the infinity signature.
+        if int(builder_index) == BUILDER_INDEX_SELF_BUILD:
+            assert int(amount) == 0
+            assert signed_bid.signature == G2_POINT_AT_INFINITY
+        else:
+            assert self.is_active_builder(state, builder_index)
+            assert self.can_builder_cover_bid(state, builder_index, amount)
+            assert self.verify_execution_payload_bid_signature(state, signed_bid)
+
+        current_epoch = self.get_current_epoch(state)
+        assert len(bid.blob_kzg_commitments) <= int(
+            self.get_blob_parameters(current_epoch).max_blobs_per_block
+        )
+
+        assert bid.slot == block.slot
+        assert bid.parent_block_hash == state.latest_block_hash
+        assert bid.parent_block_root == block.parent_root
+        assert bid.previous_randao == self.get_randao_mix(state, current_epoch)
+
+        # A priced bid books a pending payment in the slot's window entry.
+        if int(amount) > 0:
+            pending_payment = BuilderPendingPayment(
+                weight=Gwei(0),
+                withdrawal=BuilderPendingWithdrawal(
+                    fee_recipient=bid.fee_recipient,
+                    amount=amount,
+                    builder_index=builder_index,
+                ),
+            )
+            payments = list(state.builder_pending_payments)
+            payments[_SLOTS_PER_EPOCH + int(bid.slot) % _SLOTS_PER_EPOCH] = pending_payment
+            state = state.model_copy(
+                update={"builder_pending_payments": BuilderPendingPayments(data=payments)}
+            )
+
+        return state.model_copy(update={"latest_execution_payload_bid": bid})

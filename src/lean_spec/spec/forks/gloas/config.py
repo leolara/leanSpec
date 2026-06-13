@@ -8,6 +8,7 @@ and mainnet test networks assign different fork versions and activation epochs.
 """
 
 import os
+from dataclasses import dataclass
 
 from lean_spec.spec.forks.gloas.containers.primitives import Epoch, Gwei, Version
 from lean_spec.spec.ssz import Uint64
@@ -86,3 +87,28 @@ MIN_BUILDER_WITHDRAWABILITY_DELAY = Epoch(2) if _MINIMAL else Epoch(8192)
 
 CONSOLIDATION_CHURN_LIMIT_QUOTIENT = Uint64(32) if _MINIMAL else Uint64(65536)
 """Divisor of total active balance setting the per-epoch consolidation churn."""
+
+
+@dataclass(frozen=True)
+class BlobParameters:
+    """Per-epoch ceiling on how many blobs one block may carry."""
+
+    epoch: Epoch
+    """First epoch the ceiling applies from."""
+
+    max_blobs_per_block: Uint64
+    """Maximum number of blob commitments permitted in a block."""
+
+
+MAX_BLOBS_PER_BLOCK_ELECTRA = Uint64(9)
+"""Blob ceiling in force from the Electra upgrade until the first scheduled bump."""
+
+BLOB_SCHEDULE: tuple[BlobParameters, ...] = (
+    ()
+    if _MINIMAL
+    else (
+        BlobParameters(epoch=Epoch(412672), max_blobs_per_block=Uint64(15)),
+        BlobParameters(epoch=Epoch(419072), max_blobs_per_block=Uint64(21)),
+    )
+)
+"""Scheduled blob-ceiling increases, each taking effect at its activation epoch."""

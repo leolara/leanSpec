@@ -99,6 +99,11 @@ OPERATION_SPECS: dict[str, OperationSpec] = {
         container=PayloadAttestation,
         file_stem="payload_attestation",
     ),
+    "execution_payload_bid": OperationSpec(
+        method="process_execution_payload_bid",
+        container=BeaconBlock,
+        file_stem="block",
+    ),
 }
 
 
