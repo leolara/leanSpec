@@ -24,6 +24,7 @@ from lean_spec.spec.forks.gloas.containers.beacon_chain import (
     BeaconState,
     ProposerSlashing,
     SignedBLSToExecutionChange,
+    WithdrawalRequest,
 )
 from lean_spec.spec.forks.gloas.state_transition.operations import (
     process_attestation,
@@ -31,6 +32,7 @@ from lean_spec.spec.forks.gloas.state_transition.operations import (
     process_block_header,
     process_bls_to_execution_change,
     process_proposer_slashing,
+    process_withdrawal_request,
 )
 from lean_spec.spec.ssz.ssz_base import SSZType
 from pyspec_vectors_testing.decode import bls_is_active, decompress_ssz, load_meta
@@ -71,6 +73,11 @@ OPERATION_SPECS: dict[str, OperationSpec] = {
         process=process_attestation,
         container=Attestation,
         file_stem="attestation",
+    ),
+    "withdrawal_request": OperationSpec(
+        process=process_withdrawal_request,
+        container=WithdrawalRequest,
+        file_stem="withdrawal_request",
     ),
 }
 

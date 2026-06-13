@@ -179,6 +179,17 @@ def get_total_active_balance(state: BeaconState) -> Gwei:
     return get_total_balance(state, set(active_indices))
 
 
+def get_pending_balance_to_withdraw(state: BeaconState, validator_index: ValidatorIndex) -> Gwei:
+    """Return the gwei a validator already has queued for partial withdrawal."""
+    return Gwei(
+        sum(
+            int(withdrawal.amount)
+            for withdrawal in state.pending_partial_withdrawals
+            if withdrawal.validator_index == validator_index
+        )
+    )
+
+
 def get_committee_indices(committee_bits: BaseBitvector) -> list[CommitteeIndex]:
     """Return the committee indices whose bit is set in an attestation."""
     return [CommitteeIndex(index) for index, bit in enumerate(committee_bits.data) if bit]

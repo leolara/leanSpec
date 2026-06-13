@@ -22,15 +22,22 @@ from lean_spec.spec.forks.gloas.accessors import (
     get_committee_indices,
     get_current_epoch,
     get_indexed_attestation,
+    get_pending_balance_to_withdraw,
     get_previous_epoch,
     has_flag,
     is_attestation_same_slot,
+)
+from lean_spec.spec.forks.gloas.config import (
+    MIN_VALIDATOR_WITHDRAWABILITY_DELAY,
+    SHARD_COMMITTEE_PERIOD,
 )
 from lean_spec.spec.forks.gloas.constants import (
     BLS_WITHDRAWAL_PREFIX,
     DOMAIN_BEACON_PROPOSER,
     DOMAIN_BLS_TO_EXECUTION_CHANGE,
     ETH1_ADDRESS_WITHDRAWAL_PREFIX,
+    FAR_FUTURE_EPOCH,
+    FULL_EXIT_REQUEST_AMOUNT,
     PARTICIPATION_FLAG_WEIGHTS,
     PROPOSER_WEIGHT,
     WEIGHT_DENOMINATOR,
@@ -43,19 +50,35 @@ from lean_spec.spec.forks.gloas.containers.beacon_chain import (
     BeaconState,
     BuilderPendingPayment,
     BuilderPendingPayments,
+    PendingPartialWithdrawal,
+    PendingPartialWithdrawals,
     ProposerSlashing,
     SignedBLSToExecutionChange,
     Validators,
+    WithdrawalRequest,
 )
-from lean_spec.spec.forks.gloas.containers.primitives import Gwei, Root
+from lean_spec.spec.forks.gloas.containers.primitives import Epoch, Gwei, Root, ValidatorIndex
 from lean_spec.spec.forks.gloas.predicates import (
+    has_compounding_withdrawal_credential,
+    has_execution_withdrawal_credential,
+    is_active_validator,
     is_slashable_attestation_data,
     is_slashable_validator,
     is_valid_indexed_attestation,
 )
-from lean_spec.spec.forks.gloas.preset import MIN_ATTESTATION_INCLUSION_DELAY, SLOTS_PER_EPOCH
+from lean_spec.spec.forks.gloas.preset import (
+    MIN_ACTIVATION_BALANCE,
+    MIN_ATTESTATION_INCLUSION_DELAY,
+    PENDING_PARTIAL_WITHDRAWALS_LIMIT,
+    SLOTS_PER_EPOCH,
+)
 from lean_spec.spec.forks.gloas.signing import compute_domain, compute_signing_root, get_domain
-from lean_spec.spec.forks.gloas.state_transition.mutators import increase_balance, slash_validator
+from lean_spec.spec.forks.gloas.state_transition.mutators import (
+    compute_exit_epoch_and_update_churn,
+    increase_balance,
+    initiate_validator_exit,
+    slash_validator,
+)
 from lean_spec.spec.ssz import Bytes32, Uint64
 
 _SLOTS_PER_EPOCH = int(SLOTS_PER_EPOCH)
@@ -192,6 +215,78 @@ def process_attester_slashing(
             slashed_any = True
     assert slashed_any
     return state
+
+
+def process_withdrawal_request(
+    state: BeaconState, withdrawal_request: WithdrawalRequest
+) -> BeaconState:
+    """
+    Queue an execution-triggered exit or partial withdrawal for a validator.
+
+    Every validation failure is a silent no-op rather than a rejection, so the
+    post-state equals the pre-state when the request does not apply.
+    """
+    amount = int(withdrawal_request.amount)
+    is_full_exit_request = amount == int(FULL_EXIT_REQUEST_AMOUNT)
+
+    if len(state.pending_partial_withdrawals) == int(PENDING_PARTIAL_WITHDRAWALS_LIMIT) and (
+        not is_full_exit_request
+    ):
+        return state
+
+    validator_public_keys = [validator.public_key for validator in state.validators]
+    if withdrawal_request.validator_public_key not in validator_public_keys:
+        return state
+    index = ValidatorIndex(validator_public_keys.index(withdrawal_request.validator_public_key))
+    validator = state.validators[int(index)]
+
+    has_correct_credential = has_execution_withdrawal_credential(validator)
+    is_correct_source_address = bytes(validator.withdrawal_credentials)[12:] == bytes(
+        withdrawal_request.source_address
+    )
+    if not (has_correct_credential and is_correct_source_address):
+        return state
+    if not is_active_validator(validator, get_current_epoch(state)):
+        return state
+    if validator.exit_epoch != FAR_FUTURE_EPOCH:
+        return state
+    activation_floor = int(validator.activation_epoch) + int(SHARD_COMMITTEE_PERIOD)
+    if int(get_current_epoch(state)) < activation_floor:
+        return state
+
+    pending_balance_to_withdraw = int(get_pending_balance_to_withdraw(state, index))
+
+    if is_full_exit_request:
+        if pending_balance_to_withdraw == 0:
+            return initiate_validator_exit(state, index)
+        return state
+
+    minimum_balance = int(MIN_ACTIVATION_BALANCE)
+    has_sufficient_effective_balance = int(validator.effective_balance) >= minimum_balance
+    balance = int(state.balances[int(index)])
+    has_excess_balance = balance > minimum_balance + pending_balance_to_withdraw
+
+    if not (
+        has_compounding_withdrawal_credential(validator)
+        and has_sufficient_effective_balance
+        and has_excess_balance
+    ):
+        return state
+
+    to_withdraw = min(balance - int(MIN_ACTIVATION_BALANCE) - pending_balance_to_withdraw, amount)
+    state, exit_queue_epoch = compute_exit_epoch_and_update_churn(state, Gwei(to_withdraw))
+    withdrawable_epoch = Epoch(int(exit_queue_epoch) + int(MIN_VALIDATOR_WITHDRAWABILITY_DELAY))
+    queued = [
+        *list(state.pending_partial_withdrawals),
+        PendingPartialWithdrawal(
+            validator_index=index,
+            amount=Gwei(to_withdraw),
+            withdrawable_epoch=withdrawable_epoch,
+        ),
+    ]
+    return state.model_copy(
+        update={"pending_partial_withdrawals": PendingPartialWithdrawals(data=queued)}
+    )
 
 
 def process_block_header(state: BeaconState, block: BeaconBlock) -> BeaconState:
