@@ -34,6 +34,7 @@ from lean_spec.spec.forks.gloas.containers.beacon_chain import (
     SignedBLSToExecutionChange,
     SignedExecutionPayloadBid,
     SignedVoluntaryExit,
+    SyncAggregate,
     SyncCommittee,
     Validator,
     Withdrawal,
@@ -699,4 +700,40 @@ class GloasSpecBase(GloasProtocol):
     @abstractmethod
     def process_attestation(self, state: BeaconState, attestation: Attestation) -> BeaconState:
         """Record an attestation's participation flags and reward the proposer."""
+        ...
+
+    @abstractmethod
+    def process_parent_execution_payload(
+        self, state: BeaconState, block: BeaconBlock
+    ) -> BeaconState:
+        """Process the parent block's execution payload before the current block's bid."""
+        ...
+
+    @abstractmethod
+    def process_withdrawals(self, state: BeaconState) -> BeaconState:
+        """Apply the deterministic withdrawal sweep committed to by the parent payload."""
+        ...
+
+    @abstractmethod
+    def process_execution_payload_bid(self, state: BeaconState, block: BeaconBlock) -> BeaconState:
+        """Validate and record the winning execution payload bid for a block."""
+        ...
+
+    @abstractmethod
+    def process_payload_attestation(
+        self, state: BeaconState, payload_attestation: PayloadAttestation
+    ) -> BeaconState:
+        """Validate a payload timeliness attestation for the parent block."""
+        ...
+
+    @abstractmethod
+    def process_sync_aggregate(
+        self, state: BeaconState, sync_aggregate: SyncAggregate
+    ) -> BeaconState:
+        """Verify the sync committee's signature over the previous block and pay rewards."""
+        ...
+
+    @abstractmethod
+    def process_epoch(self, state: BeaconState) -> BeaconState:
+        """Run every per-epoch sub-transition in order at an epoch boundary."""
         ...

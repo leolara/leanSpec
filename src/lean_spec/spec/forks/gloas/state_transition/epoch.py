@@ -83,6 +83,26 @@ _MIN_SEED_LOOKAHEAD = int(MIN_SEED_LOOKAHEAD)
 class EpochMixin(GloasSpecBase):
     """Per-epoch transition behavior for the Gloas spec."""
 
+    def process_epoch(self, state: BeaconState) -> BeaconState:
+        """Run every per-epoch sub-transition in its fixed order at an epoch boundary."""
+        state = self.process_justification_and_finalization(state)
+        state = self.process_inactivity_updates(state)
+        state = self.process_rewards_and_penalties(state)
+        state = self.process_registry_updates(state)
+        state = self.process_slashings(state)
+        state = self.process_eth1_data_reset(state)
+        state = self.process_pending_deposits(state)
+        state = self.process_pending_consolidations(state)
+        state = self.process_builder_pending_payments(state)
+        state = self.process_effective_balance_updates(state)
+        state = self.process_slashings_reset(state)
+        state = self.process_randao_mixes_reset(state)
+        state = self.process_historical_summaries_update(state)
+        state = self.process_participation_flag_updates(state)
+        state = self.process_sync_committee_updates(state)
+        state = self.process_proposer_lookahead(state)
+        return self.process_ptc_window(state)
+
     def weigh_justification_and_finalization(
         self,
         state: BeaconState,
