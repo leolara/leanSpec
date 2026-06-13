@@ -22,6 +22,7 @@ from lean_spec.spec.forks.gloas.containers.beacon_chain import (
     AttesterSlashing,
     BeaconBlock,
     BeaconState,
+    ConsolidationRequest,
     ProposerSlashing,
     SignedBLSToExecutionChange,
     SignedVoluntaryExit,
@@ -32,6 +33,7 @@ from lean_spec.spec.forks.gloas.state_transition.operations import (
     process_attester_slashing,
     process_block_header,
     process_bls_to_execution_change,
+    process_consolidation_request,
     process_proposer_slashing,
     process_voluntary_exit,
     process_withdrawal_request,
@@ -90,6 +92,11 @@ OPERATION_SPECS: dict[str, OperationSpec] = {
         process=process_voluntary_exit,
         container=SignedVoluntaryExit,
         file_stem="voluntary_exit",
+    ),
+    "consolidation_request": OperationSpec(
+        process=process_consolidation_request,
+        container=ConsolidationRequest,
+        file_stem="consolidation_request",
     ),
 }
 

@@ -28,6 +28,7 @@ from lean_spec.spec.forks.gloas.accessors import (
     has_flag,
     is_active_builder,
     is_attestation_same_slot,
+    is_valid_switch_to_compounding_request,
 )
 from lean_spec.spec.forks.gloas.config import (
     CAPELLA_FORK_VERSION,
@@ -54,6 +55,9 @@ from lean_spec.spec.forks.gloas.containers.beacon_chain import (
     BeaconState,
     BuilderPendingPayment,
     BuilderPendingPayments,
+    ConsolidationRequest,
+    PendingConsolidation,
+    PendingConsolidations,
     PendingPartialWithdrawal,
     PendingPartialWithdrawals,
     ProposerSlashing,
@@ -76,16 +80,21 @@ from lean_spec.spec.forks.gloas.predicates import (
 from lean_spec.spec.forks.gloas.preset import (
     MIN_ACTIVATION_BALANCE,
     MIN_ATTESTATION_INCLUSION_DELAY,
+    PENDING_CONSOLIDATIONS_LIMIT,
     PENDING_PARTIAL_WITHDRAWALS_LIMIT,
     SLOTS_PER_EPOCH,
 )
 from lean_spec.spec.forks.gloas.signing import compute_domain, compute_signing_root, get_domain
 from lean_spec.spec.forks.gloas.state_transition.mutators import (
+    compute_consolidation_epoch_and_update_churn,
     compute_exit_epoch_and_update_churn,
+    get_consolidation_churn_limit,
     increase_balance,
     initiate_builder_exit,
     initiate_validator_exit,
+    replace_validator,
     slash_validator,
+    switch_to_compounding_validator,
 )
 from lean_spec.spec.ssz import Bytes32, Uint64
 
@@ -295,6 +304,76 @@ def process_withdrawal_request(
     return state.model_copy(
         update={"pending_partial_withdrawals": PendingPartialWithdrawals(data=queued)}
     )
+
+
+def process_consolidation_request(
+    state: BeaconState, consolidation_request: ConsolidationRequest
+) -> BeaconState:
+    """
+    Switch a validator to compounding, or queue a source-to-target consolidation.
+
+    Every validation failure is a silent no-op rather than a rejection, so the
+    post-state equals the pre-state when the request does not apply.
+    """
+    if is_valid_switch_to_compounding_request(state, consolidation_request):
+        public_keys = [validator.public_key for validator in state.validators]
+        source_index = ValidatorIndex(public_keys.index(consolidation_request.source_public_key))
+        return switch_to_compounding_validator(state, source_index)
+
+    if consolidation_request.source_public_key == consolidation_request.target_public_key:
+        return state
+    if len(state.pending_consolidations) == int(PENDING_CONSOLIDATIONS_LIMIT):
+        return state
+    if int(get_consolidation_churn_limit(state)) <= int(MIN_ACTIVATION_BALANCE):
+        return state
+
+    public_keys = [validator.public_key for validator in state.validators]
+    if consolidation_request.source_public_key not in public_keys:
+        return state
+    if consolidation_request.target_public_key not in public_keys:
+        return state
+    source_index = ValidatorIndex(public_keys.index(consolidation_request.source_public_key))
+    target_index = ValidatorIndex(public_keys.index(consolidation_request.target_public_key))
+    source = state.validators[int(source_index)]
+    target = state.validators[int(target_index)]
+
+    is_correct_source_address = bytes(source.withdrawal_credentials)[12:] == bytes(
+        consolidation_request.source_address
+    )
+    if not (has_execution_withdrawal_credential(source) and is_correct_source_address):
+        return state
+    if not has_compounding_withdrawal_credential(target):
+        return state
+
+    current_epoch = get_current_epoch(state)
+    if not is_active_validator(source, current_epoch):
+        return state
+    if not is_active_validator(target, current_epoch):
+        return state
+    if source.exit_epoch != FAR_FUTURE_EPOCH:
+        return state
+    if target.exit_epoch != FAR_FUTURE_EPOCH:
+        return state
+    if int(current_epoch) < int(source.activation_epoch) + int(SHARD_COMMITTEE_PERIOD):
+        return state
+    if int(get_pending_balance_to_withdraw(state, source_index)) > 0:
+        return state
+
+    state, exit_epoch = compute_consolidation_epoch_and_update_churn(
+        state, source.effective_balance
+    )
+    consolidated_source = source.model_copy(
+        update={
+            "exit_epoch": exit_epoch,
+            "withdrawable_epoch": Epoch(int(exit_epoch) + int(MIN_VALIDATOR_WITHDRAWABILITY_DELAY)),
+        }
+    )
+    state = replace_validator(state, int(source_index), consolidated_source)
+    queued = [
+        *list(state.pending_consolidations),
+        PendingConsolidation(source_index=source_index, target_index=target_index),
+    ]
+    return state.model_copy(update={"pending_consolidations": PendingConsolidations(data=queued)})
 
 
 def process_voluntary_exit(

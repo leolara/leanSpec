@@ -25,6 +25,7 @@ from lean_spec.spec.forks.gloas.containers.beacon_chain import (
     AttestationData,
     AttestingIndices,
     BeaconState,
+    ConsolidationRequest,
     IndexedAttestation,
 )
 from lean_spec.spec.forks.gloas.containers.primitives import (
@@ -40,7 +41,10 @@ from lean_spec.spec.forks.gloas.containers.primitives import (
 )
 from lean_spec.spec.forks.gloas.helpers.math import integer_squareroot, uint64_to_bytes
 from lean_spec.spec.forks.gloas.helpers.shuffle import compute_committee
-from lean_spec.spec.forks.gloas.predicates import is_active_validator
+from lean_spec.spec.forks.gloas.predicates import (
+    has_eth1_withdrawal_credential,
+    is_active_validator,
+)
 from lean_spec.spec.forks.gloas.preset import (
     BASE_REWARD_FACTOR,
     EFFECTIVE_BALANCE_INCREMENT,
@@ -190,6 +194,25 @@ def get_pending_balance_to_withdraw(state: BeaconState, validator_index: Validat
             if withdrawal.validator_index == validator_index
         )
     )
+
+
+def is_valid_switch_to_compounding_request(
+    state: BeaconState, consolidation_request: ConsolidationRequest
+) -> bool:
+    """Check whether a self-targeting consolidation requests a compounding switch."""
+    if consolidation_request.source_public_key != consolidation_request.target_public_key:
+        return False
+    public_keys = [validator.public_key for validator in state.validators]
+    if consolidation_request.source_public_key not in public_keys:
+        return False
+    source = state.validators[public_keys.index(consolidation_request.source_public_key)]
+    if bytes(source.withdrawal_credentials)[12:] != bytes(consolidation_request.source_address):
+        return False
+    if not has_eth1_withdrawal_credential(source):
+        return False
+    if not is_active_validator(source, get_current_epoch(state)):
+        return False
+    return source.exit_epoch == FAR_FUTURE_EPOCH
 
 
 def is_active_builder(state: BeaconState, builder_index: BuilderIndex) -> bool:

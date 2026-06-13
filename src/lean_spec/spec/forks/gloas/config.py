@@ -83,3 +83,6 @@ SHARD_COMMITTEE_PERIOD = Uint64(64) if _MINIMAL else Uint64(256)
 
 MIN_BUILDER_WITHDRAWABILITY_DELAY = Epoch(2) if _MINIMAL else Epoch(8192)
 """Epochs an exited builder waits before its balance becomes withdrawable."""
+
+CONSOLIDATION_CHURN_LIMIT_QUOTIENT = Uint64(32) if _MINIMAL else Uint64(65536)
+"""Divisor of total active balance setting the per-epoch consolidation churn."""
