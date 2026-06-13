@@ -31,6 +31,7 @@ from lean_spec.spec.forks.gloas.containers.beacon_chain import (
     PendingDeposits,
     ProposerSlashing,
     PtcWindowElement,
+    SignedBeaconBlock,
     SignedBLSToExecutionChange,
     SignedExecutionPayloadBid,
     SignedVoluntaryExit,
@@ -379,6 +380,28 @@ class GloasSpecBase(GloasProtocol):
     @abstractmethod
     def compute_ptc(self, state: BeaconState, slot: Slot) -> PtcWindowElement:
         """Sample the payload timeliness committee for a slot, balance-weighted with duplicates."""
+        ...
+
+    @abstractmethod
+    def get_ptc(self, state: BeaconState, slot: Slot) -> PtcWindowElement:
+        """Return the payload timeliness committee cached for a slot in the window."""
+        ...
+
+    @abstractmethod
+    def process_justification_and_finalization(self, state: BeaconState) -> BeaconState:
+        """Tally the target votes of the last two epochs and update justification and finality."""
+        ...
+
+    @abstractmethod
+    def process_slots(self, state: BeaconState, slot: Slot) -> BeaconState:
+        """Advance the state to a slot, running epoch processing at each boundary."""
+        ...
+
+    @abstractmethod
+    def state_transition(
+        self, state: BeaconState, signed_block: SignedBeaconBlock, validate_result: bool = True
+    ) -> BeaconState:
+        """Advance to the block's slot, verify it, apply it, and check the state root."""
         ...
 
     @abstractmethod

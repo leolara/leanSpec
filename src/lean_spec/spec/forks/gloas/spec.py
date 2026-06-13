@@ -10,6 +10,7 @@ import os
 from typing import ClassVar
 
 from lean_spec.spec.forks.gloas.accessors import AccessorMixin
+from lean_spec.spec.forks.gloas.fork_choice import ForkChoiceMixin
 from lean_spec.spec.forks.gloas.predicates import PredicatesMixin
 from lean_spec.spec.forks.gloas.signing import SignatureMixin
 from lean_spec.spec.forks.gloas.spec_base import GloasSpecBase
@@ -29,6 +30,7 @@ class GloasSpec(
     OperationMixin,
     EpochMixin,
     StateTransitionMixin,
+    ForkChoiceMixin,
     GloasSpecBase,
 ):
     """The standalone mainnet Gloas reference spec."""

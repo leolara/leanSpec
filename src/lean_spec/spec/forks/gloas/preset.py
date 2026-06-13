@@ -234,6 +234,12 @@ KZG_COMMITMENTS_INCLUSION_PROOF_DEPTH = Uint64(4)
 PTC_SIZE = Uint64(16) if _PRESET == "minimal" else Uint64(512)
 """Ptc size (preset-selected)."""
 
+PAYLOAD_TIMELY_THRESHOLD = PTC_SIZE // Uint64(2)
+"""Payload timeliness committee votes needed to call a payload timely."""
+
+DATA_AVAILABILITY_TIMELY_THRESHOLD = PTC_SIZE // Uint64(2)
+"""Payload timeliness committee votes needed to call blob data available."""
+
 MAX_PAYLOAD_ATTESTATIONS = 4
 """Max payload attestations (preset constant)."""
 

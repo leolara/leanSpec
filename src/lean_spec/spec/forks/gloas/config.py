@@ -100,6 +100,36 @@ INACTIVITY_SCORE_BIAS = Uint64(4)
 INACTIVITY_SCORE_RECOVERY_RATE = Uint64(16)
 """Per-epoch inactivity-score decrease once the chain is no longer leaking."""
 
+SLOT_DURATION_MS = Uint64(6000) if _MINIMAL else Uint64(12000)
+"""Wall-clock duration of a slot in milliseconds."""
+
+PROPOSER_SCORE_BOOST = Uint64(40)
+"""Percent of one slot's committee weight a timely block's proposer is boosted by."""
+
+REORG_HEAD_WEIGHT_THRESHOLD = Uint64(20)
+"""Percent of committee weight below which a head is weak enough to re-org."""
+
+REORG_PARENT_WEIGHT_THRESHOLD = Uint64(160)
+"""Percent of committee weight a parent must exceed to be strong enough to re-org onto."""
+
+REORG_MAX_EPOCHS_SINCE_FINALIZATION = Epoch(2)
+"""Epochs since finalization beyond which proposer re-orgs are disabled."""
+
+PROPOSER_REORG_CUTOFF_BPS = Uint64(1667)
+"""Basis points into a slot past which a proposer must not attempt a re-org."""
+
+ATTESTATION_DUE_BPS_GLOAS = Uint64(2500)
+"""Basis points into a slot by which an attestation is due to be timely."""
+
+AGGREGATE_DUE_BPS_GLOAS = Uint64(5000)
+"""Basis points into a slot by which an aggregate is due."""
+
+PAYLOAD_DUE_BPS = Uint64(7500)
+"""Basis points into a slot by which the execution payload is due."""
+
+PAYLOAD_ATTESTATION_DUE_BPS = Uint64(7500)
+"""Basis points into a slot by which a payload timeliness attestation is due."""
+
 
 @dataclass(frozen=True)
 class BlobParameters:
