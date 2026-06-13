@@ -18,12 +18,13 @@ import yaml
 
 from pyspec_vectors_testing.handlers.epoch_processing import run_epoch_processing_case
 from pyspec_vectors_testing.handlers.operations import run_operations_case
+from pyspec_vectors_testing.handlers.rewards import run_rewards_case
 from pyspec_vectors_testing.handlers.shuffling import run_shuffling_case
 from pyspec_vectors_testing.handlers.state_transition import run_blocks_case, run_sanity_case
 
 # Runners whose cases this harness knows how to execute.
 SUPPORTED_RUNNERS = frozenset(
-    {"shuffling", "operations", "epoch_processing", "sanity", "finality", "random"}
+    {"shuffling", "operations", "epoch_processing", "sanity", "finality", "random", "rewards"}
 )
 
 
@@ -64,6 +65,8 @@ class VectorCaseItem(pytest.Item):
             run_sanity_case(case_dir, manifest.get("handler"))
         elif runner in ("finality", "random"):
             run_blocks_case(case_dir)
+        elif runner == "rewards":
+            run_rewards_case(case_dir)
         else:
             pytest.skip(f"runner not yet supported: {runner}")
 
