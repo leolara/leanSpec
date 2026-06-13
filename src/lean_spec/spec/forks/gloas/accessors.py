@@ -12,31 +12,47 @@ wrapped back into its domain type.
 
 from hashlib import sha256
 
-from lean_spec.spec.forks.gloas.constants import DOMAIN_BEACON_ATTESTER, GENESIS_EPOCH
-from lean_spec.spec.forks.gloas.containers.beacon_chain import BeaconState
+from lean_spec.spec.forks.gloas.constants import (
+    DOMAIN_BEACON_ATTESTER,
+    GENESIS_EPOCH,
+    TIMELY_HEAD_FLAG_INDEX,
+    TIMELY_SOURCE_FLAG_INDEX,
+    TIMELY_TARGET_FLAG_INDEX,
+)
+from lean_spec.spec.forks.gloas.containers.beacon_chain import (
+    Attestation,
+    AttestationData,
+    AttestingIndices,
+    BeaconState,
+    IndexedAttestation,
+)
 from lean_spec.spec.forks.gloas.containers.primitives import (
     CommitteeIndex,
     DomainType,
     Epoch,
     Gwei,
+    ParticipationFlags,
     Root,
     Slot,
     ValidatorIndex,
 )
-from lean_spec.spec.forks.gloas.helpers.math import uint64_to_bytes
+from lean_spec.spec.forks.gloas.helpers.math import integer_squareroot, uint64_to_bytes
 from lean_spec.spec.forks.gloas.helpers.shuffle import compute_committee
 from lean_spec.spec.forks.gloas.predicates import is_active_validator
 from lean_spec.spec.forks.gloas.preset import (
+    BASE_REWARD_FACTOR,
     EFFECTIVE_BALANCE_INCREMENT,
     EPOCHS_PER_HISTORICAL_VECTOR,
     MAX_COMMITTEES_PER_SLOT,
     MAX_SEED_LOOKAHEAD,
+    MIN_ATTESTATION_INCLUSION_DELAY,
     MIN_SEED_LOOKAHEAD,
     SLOTS_PER_EPOCH,
     SLOTS_PER_HISTORICAL_ROOT,
     TARGET_COMMITTEE_SIZE,
 )
 from lean_spec.spec.ssz import Bytes32, Uint64
+from lean_spec.spec.ssz.bitfields import BaseBitvector
 
 _SLOTS_PER_EPOCH = int(SLOTS_PER_EPOCH)
 _SLOTS_PER_HISTORICAL_ROOT = int(SLOTS_PER_HISTORICAL_ROOT)
@@ -161,3 +177,117 @@ def get_total_active_balance(state: BeaconState) -> Gwei:
     """Return the summed effective balance of the currently active validators."""
     active_indices = get_active_validator_indices(state, get_current_epoch(state))
     return get_total_balance(state, set(active_indices))
+
+
+def get_committee_indices(committee_bits: BaseBitvector) -> list[CommitteeIndex]:
+    """Return the committee indices whose bit is set in an attestation."""
+    return [CommitteeIndex(index) for index, bit in enumerate(committee_bits.data) if bit]
+
+
+def get_attesting_indices(state: BeaconState, attestation: Attestation) -> set[ValidatorIndex]:
+    """Return the validator indices that an attestation's bits mark as attesting."""
+    attesting: set[ValidatorIndex] = set()
+    committee_offset = 0
+    for committee_index in get_committee_indices(attestation.committee_bits):
+        committee = get_beacon_committee(state, attestation.data.slot, committee_index)
+        for position, attester_index in enumerate(committee):
+            if attestation.aggregation_bits[committee_offset + position]:
+                attesting.add(attester_index)
+        committee_offset += len(committee)
+    return attesting
+
+
+def get_indexed_attestation(state: BeaconState, attestation: Attestation) -> IndexedAttestation:
+    """Return the indexed form of an attestation, with sorted attesting indices."""
+    attesting_indices = sorted(get_attesting_indices(state, attestation))
+    return IndexedAttestation(
+        attesting_indices=AttestingIndices(data=attesting_indices),
+        data=attestation.data,
+        signature=attestation.signature,
+    )
+
+
+def is_attestation_same_slot(state: BeaconState, data: AttestationData) -> bool:
+    """Check whether an attestation votes for the block proposed at its own slot."""
+    if data.slot == Slot(0):
+        return True
+    block_root = data.beacon_block_root
+    same_slot_root = get_block_root_at_slot(state, data.slot)
+    previous_slot_root = get_block_root_at_slot(state, Slot(int(data.slot) - 1))
+    return block_root == same_slot_root and block_root != previous_slot_root
+
+
+def get_attestation_participation_flag_indices(
+    state: BeaconState, data: AttestationData, inclusion_delay: Uint64
+) -> list[int]:
+    """
+    Return which timeliness flags an attestation earns.
+
+    The flags reward a vote whose source, target, head, and execution-payload
+    presence match the canonical chain, each within its own timeliness window.
+
+    Raises:
+        AssertionError: If the source checkpoint does not match the justified one.
+    """
+    if data.target.epoch == get_current_epoch(state):
+        justified_checkpoint = state.current_justified_checkpoint
+    else:
+        justified_checkpoint = state.previous_justified_checkpoint
+    is_matching_source = data.source == justified_checkpoint
+
+    target_root = get_block_root(state, data.target.epoch)
+    is_matching_target = is_matching_source and data.target.root == target_root
+
+    if is_attestation_same_slot(state, data):
+        assert data.index == CommitteeIndex(0)
+        payload_matches = True
+    else:
+        slot_index = int(data.slot) % int(SLOTS_PER_HISTORICAL_ROOT)
+        payload_present = state.execution_payload_availability.data[slot_index]
+        payload_matches = int(data.index) == int(payload_present)
+
+    head_root = get_block_root_at_slot(state, data.slot)
+    is_matching_head = (
+        is_matching_target and data.beacon_block_root == head_root and payload_matches
+    )
+
+    assert is_matching_source
+
+    flag_indices: list[int] = []
+    timely_source_window = integer_squareroot(SLOTS_PER_EPOCH)
+    if is_matching_source and inclusion_delay <= timely_source_window:
+        flag_indices.append(TIMELY_SOURCE_FLAG_INDEX)
+    if is_matching_target:
+        flag_indices.append(TIMELY_TARGET_FLAG_INDEX)
+    if is_matching_head and inclusion_delay == MIN_ATTESTATION_INCLUSION_DELAY:
+        flag_indices.append(TIMELY_HEAD_FLAG_INDEX)
+    return flag_indices
+
+
+def get_base_reward_per_increment(state: BeaconState) -> Gwei:
+    """Return the base reward earned per effective-balance increment this epoch."""
+    total_active = Uint64(int(get_total_active_balance(state)))
+    return Gwei(
+        int(EFFECTIVE_BALANCE_INCREMENT)
+        * int(BASE_REWARD_FACTOR)
+        // int(integer_squareroot(total_active))
+    )
+
+
+def get_base_reward(state: BeaconState, index: ValidatorIndex) -> Gwei:
+    """Return one validator's base reward, scaled by its effective balance."""
+    increments = int(state.validators[int(index)].effective_balance) // int(
+        EFFECTIVE_BALANCE_INCREMENT
+    )
+    return Gwei(increments * int(get_base_reward_per_increment(state)))
+
+
+def add_flag(flags: ParticipationFlags, flag_index: int) -> ParticipationFlags:
+    """Return the participation flags with one timeliness flag added."""
+    return flags | ParticipationFlags(2**flag_index)
+
+
+def has_flag(flags: ParticipationFlags, flag_index: int) -> bool:
+    """Check whether the participation flags already carry one timeliness flag."""
+    flag = ParticipationFlags(2**flag_index)
+    return (flags & flag) == flag

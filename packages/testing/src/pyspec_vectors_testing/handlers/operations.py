@@ -18,13 +18,17 @@ import pytest
 import lean_spec.spec.crypto.bls as bls
 from lean_spec.spec.crypto.merkleization import hash_tree_root
 from lean_spec.spec.forks.gloas.containers.beacon_chain import (
+    Attestation,
     AttesterSlashing,
+    BeaconBlock,
     BeaconState,
     ProposerSlashing,
     SignedBLSToExecutionChange,
 )
 from lean_spec.spec.forks.gloas.state_transition.operations import (
+    process_attestation,
     process_attester_slashing,
+    process_block_header,
     process_bls_to_execution_change,
     process_proposer_slashing,
 )
@@ -57,6 +61,16 @@ OPERATION_SPECS: dict[str, OperationSpec] = {
         process=process_attester_slashing,
         container=AttesterSlashing,
         file_stem="attester_slashing",
+    ),
+    "block_header": OperationSpec(
+        process=process_block_header,
+        container=BeaconBlock,
+        file_stem="block",
+    ),
+    "attestation": OperationSpec(
+        process=process_attestation,
+        container=Attestation,
+        file_stem="attestation",
     ),
 }
 
