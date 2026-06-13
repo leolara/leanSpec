@@ -130,6 +130,24 @@ def FastAggregateVerify(  # noqa: N802
         return False
 
 
+G2_POINT_AT_INFINITY = BLSSignature(b"\xc0" + b"\x00" * 95)
+"""Compressed encoding of the G2 identity, the signature an empty key set signs."""
+
+
+def eth_fast_aggregate_verify(  # noqa: N802
+    public_keys: Sequence[BLSPubkey], message: bytes, signature: BLSSignature
+) -> bool:
+    """
+    Verify an aggregate signature, accepting the infinity signature for an empty key set.
+
+    An empty key set verifies only against the G2 point at infinity; otherwise this
+    aggregates the keys and verifies as usual.
+    """
+    if len(public_keys) == 0:
+        return signature == G2_POINT_AT_INFINITY
+    return FastAggregateVerify(public_keys, message, signature)
+
+
 def AggregateVerify(  # noqa: N802
     public_keys: Sequence[BLSPubkey], messages: Sequence[bytes], signature: BLSSignature
 ) -> bool:

@@ -20,6 +20,7 @@ from lean_spec.spec.forks.gloas.constants import (
     BUILDER_INDEX_SELF_BUILD,
     DOMAIN_BEACON_PROPOSER,
     DOMAIN_BLS_TO_EXECUTION_CHANGE,
+    DOMAIN_SYNC_COMMITTEE,
     DOMAIN_VOLUNTARY_EXIT,
     ETH1_ADDRESS_WITHDRAWAL_PREFIX,
     FAR_FUTURE_EPOCH,
@@ -27,6 +28,7 @@ from lean_spec.spec.forks.gloas.constants import (
     G2_POINT_AT_INFINITY,
     PARTICIPATION_FLAG_WEIGHTS,
     PROPOSER_WEIGHT,
+    SYNC_REWARD_WEIGHT,
     WEIGHT_DENOMINATOR,
 )
 from lean_spec.spec.forks.gloas.containers.beacon_chain import (
@@ -53,17 +55,26 @@ from lean_spec.spec.forks.gloas.containers.beacon_chain import (
     ProposerSlashing,
     SignedBLSToExecutionChange,
     SignedVoluntaryExit,
+    SyncAggregate,
     Validators,
     WithdrawalRequest,
     Withdrawals,
 )
-from lean_spec.spec.forks.gloas.containers.primitives import Epoch, Gwei, Root, ValidatorIndex
+from lean_spec.spec.forks.gloas.containers.primitives import (
+    Epoch,
+    Gwei,
+    Root,
+    Slot,
+    ValidatorIndex,
+)
 from lean_spec.spec.forks.gloas.preset import (
+    EFFECTIVE_BALANCE_INCREMENT,
     MIN_ACTIVATION_BALANCE,
     MIN_ATTESTATION_INCLUSION_DELAY,
     PENDING_CONSOLIDATIONS_LIMIT,
     PENDING_PARTIAL_WITHDRAWALS_LIMIT,
     SLOTS_PER_EPOCH,
+    SYNC_COMMITTEE_SIZE,
 )
 from lean_spec.spec.forks.gloas.spec_base import GloasSpecBase
 from lean_spec.spec.ssz import Bytes32, Uint64
@@ -684,3 +695,74 @@ class OperationMixin(GloasSpecBase):
 
         assert hash_tree_root(requests) == parent_bid.execution_requests_root
         return self.apply_parent_execution_payload(state, requests)
+
+    def process_sync_aggregate(
+        self, state: BeaconState, sync_aggregate: SyncAggregate
+    ) -> BeaconState:
+        """
+        Verify the sync committee's signature over the previous block and pay rewards.
+
+        The aggregate signs the previous slot's block root. Each participant earns a
+        share, the proposer earns a cut per participant, and absentees are penalized
+        the same share.
+
+        Raises:
+            AssertionError: If the aggregate signature does not verify.
+        """
+        committee_public_keys = state.current_sync_committee.public_keys
+        committee_bits = sync_aggregate.sync_committee_bits
+
+        # Aggregate the participating keys directly; the upstream subtract-the-absentees
+        # path is a performance optimization that yields the same aggregate key.
+        participant_public_keys = [
+            public_key
+            for public_key, participation_bit in zip(
+                committee_public_keys, committee_bits.data, strict=True
+            )
+            if participation_bit
+        ]
+        previous_slot = Slot(max(int(state.slot), 1) - 1)
+        domain = self.get_domain(
+            state, DOMAIN_SYNC_COMMITTEE, self.compute_epoch_at_slot(previous_slot)
+        )
+        signing_root = self.compute_signing_root(
+            self.get_block_root_at_slot(state, previous_slot), domain
+        )
+        assert bls.eth_fast_aggregate_verify(
+            participant_public_keys, signing_root, sync_aggregate.sync_committee_signature
+        )
+
+        total_active_increments = int(self.get_total_active_balance(state)) // int(
+            EFFECTIVE_BALANCE_INCREMENT
+        )
+        base_reward_per_increment = int(self.get_base_reward_per_increment(state))
+        total_base_rewards = base_reward_per_increment * total_active_increments
+        max_participant_rewards = (
+            total_base_rewards
+            * int(SYNC_REWARD_WEIGHT)
+            // int(WEIGHT_DENOMINATOR)
+            // _SLOTS_PER_EPOCH
+        )
+        participant_reward = Gwei(max_participant_rewards // int(SYNC_COMMITTEE_SIZE))
+        proposer_reward = Gwei(
+            int(participant_reward)
+            * int(PROPOSER_WEIGHT)
+            // (int(WEIGHT_DENOMINATOR) - int(PROPOSER_WEIGHT))
+        )
+
+        validator_public_keys = [validator.public_key for validator in state.validators]
+        committee_indices = [
+            ValidatorIndex(validator_public_keys.index(public_key))
+            for public_key in committee_public_keys
+        ]
+        for participant_index, participation_bit in zip(
+            committee_indices, committee_bits.data, strict=True
+        ):
+            if participation_bit:
+                state = self.increase_balance(state, participant_index, participant_reward)
+                state = self.increase_balance(
+                    state, self.get_beacon_proposer_index(state), proposer_reward
+                )
+            else:
+                state = self.decrease_balance(state, participant_index, participant_reward)
+        return state

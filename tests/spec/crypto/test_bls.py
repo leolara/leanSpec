@@ -113,6 +113,29 @@ class TestAggregate:
             is False
         )
 
+    def test_eth_fast_aggregate_verify_empty_accepts_infinity(self) -> None:
+        """An empty key set verifies only against the infinity signature."""
+        assert bls.eth_fast_aggregate_verify([], MESSAGE, bls.G2_POINT_AT_INFINITY) is True
+
+    def test_eth_fast_aggregate_verify_empty_rejects_non_infinity(self) -> None:
+        """An empty key set rejects any signature that is not the infinity signature."""
+        non_infinity_signature = bls.Sign(SECRET_KEY_A, MESSAGE)
+        assert bls.eth_fast_aggregate_verify([], MESSAGE, non_infinity_signature) is False
+
+    def test_eth_fast_aggregate_verify_non_empty_verifies_aggregate(self) -> None:
+        """A non-empty key set delegates to the aggregate signature check."""
+        public_key_a = bls.SkToPk(SECRET_KEY_A)
+        public_key_b = bls.SkToPk(SECRET_KEY_B)
+        aggregate_signature = bls.Aggregate(
+            [bls.Sign(SECRET_KEY_A, MESSAGE), bls.Sign(SECRET_KEY_B, MESSAGE)]
+        )
+        assert (
+            bls.eth_fast_aggregate_verify(
+                [public_key_a, public_key_b], MESSAGE, aggregate_signature
+            )
+            is True
+        )
+
 
 class TestKeyValidate:
     """Public-key validation against the prime-order subgroup."""
@@ -162,3 +185,4 @@ def test_module_constants_are_typed() -> None:
     assert bls.BLSSignature is Bytes96
     assert isinstance(bls.STUB_SIGNATURE, Bytes96)
     assert isinstance(bls.STUB_PUBKEY, Bytes48)
+    assert bls.G2_POINT_AT_INFINITY == Bytes96(b"\xc0" + b"\x00" * 95)

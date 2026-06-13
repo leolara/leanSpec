@@ -26,6 +26,7 @@ from lean_spec.spec.forks.gloas.containers.beacon_chain import (
     ProposerSlashing,
     SignedBLSToExecutionChange,
     SignedVoluntaryExit,
+    SyncAggregate,
     WithdrawalRequest,
 )
 from lean_spec.spec.forks.gloas.spec import GloasSpec
@@ -113,6 +114,11 @@ OPERATION_SPECS: dict[str, OperationSpec] = {
         method="process_parent_execution_payload",
         container=BeaconBlock,
         file_stem="block",
+    ),
+    "sync_aggregate": OperationSpec(
+        method="process_sync_aggregate",
+        container=SyncAggregate,
+        file_stem="sync_aggregate",
     ),
 }
 
