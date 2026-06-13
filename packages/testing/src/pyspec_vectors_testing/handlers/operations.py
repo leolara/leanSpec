@@ -22,6 +22,7 @@ from lean_spec.spec.forks.gloas.containers.beacon_chain import (
     BeaconState,
     ConsolidationRequest,
     DepositRequest,
+    PayloadAttestation,
     ProposerSlashing,
     SignedBLSToExecutionChange,
     SignedVoluntaryExit,
@@ -92,6 +93,11 @@ OPERATION_SPECS: dict[str, OperationSpec] = {
         method="process_deposit_request",
         container=DepositRequest,
         file_stem="deposit_request",
+    ),
+    "payload_attestation": OperationSpec(
+        method="process_payload_attestation",
+        container=PayloadAttestation,
+        file_stem="payload_attestation",
     ),
 }
 

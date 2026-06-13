@@ -27,6 +27,10 @@ from lean_spec.spec.forks.gloas.containers.beacon_chain import (
     BeaconState,
     ConsolidationRequest,
     IndexedAttestation,
+    IndexedPayloadAttestation,
+    IndexedpayloadattestationAttestingIndices,
+    PayloadAttestation,
+    PtcWindowElement,
 )
 from lean_spec.spec.forks.gloas.containers.primitives import (
     BuilderIndex,
@@ -236,6 +240,38 @@ class AccessorMixin(GloasSpecBase):
             if payment.withdrawal.builder_index == builder_index
         )
         return Gwei(from_withdrawals + from_payments)
+
+    def get_ptc(self, state: BeaconState, slot: Slot) -> PtcWindowElement:
+        """Return the payload timeliness committee cached for a slot in the window."""
+        epoch = self.compute_epoch_at_slot(slot)
+        state_epoch = self.get_current_epoch(state)
+        slot_offset_in_epoch = int(slot) % _SLOTS_PER_EPOCH
+        # The window stores one epoch behind, the current epoch, and the lookahead epochs.
+        if int(epoch) < int(state_epoch):
+            assert int(epoch) + 1 == int(state_epoch)
+            return state.ptc_window[slot_offset_in_epoch]
+        assert int(epoch) <= int(state_epoch) + _MIN_SEED_LOOKAHEAD
+        window_offset = (int(epoch) - int(state_epoch) + 1) * _SLOTS_PER_EPOCH
+        return state.ptc_window[window_offset + slot_offset_in_epoch]
+
+    def get_indexed_payload_attestation(
+        self, state: BeaconState, payload_attestation: PayloadAttestation
+    ) -> IndexedPayloadAttestation:
+        """Return the indexed form of a payload attestation, resolved against its committee."""
+        payload_timeliness_committee = self.get_ptc(state, payload_attestation.data.slot)
+        aggregation_bits = payload_attestation.aggregation_bits
+        attesting_indices = [
+            validator_index
+            for committee_position, validator_index in enumerate(payload_timeliness_committee)
+            if aggregation_bits.data[committee_position]
+        ]
+        return IndexedPayloadAttestation(
+            attesting_indices=IndexedpayloadattestationAttestingIndices(
+                data=sorted(attesting_indices)
+            ),
+            data=payload_attestation.data,
+            signature=payload_attestation.signature,
+        )
 
     def get_committee_indices(self, committee_bits: BaseBitvector) -> list[CommitteeIndex]:
         """Return the committee indices whose bit is set in an attestation."""

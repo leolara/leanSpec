@@ -13,6 +13,7 @@ from lean_spec.spec.forks.gloas.constants import (
     COMPOUNDING_WITHDRAWAL_PREFIX,
     DOMAIN_BEACON_ATTESTER,
     DOMAIN_DEPOSIT,
+    DOMAIN_PTC_ATTESTER,
     ETH1_ADDRESS_WITHDRAWAL_PREFIX,
     FAR_FUTURE_EPOCH,
 )
@@ -21,6 +22,7 @@ from lean_spec.spec.forks.gloas.containers.beacon_chain import (
     BeaconState,
     DepositMessage,
     IndexedAttestation,
+    IndexedPayloadAttestation,
     PendingDeposits,
     Validator,
 )
@@ -171,6 +173,22 @@ class PredicatesMixin(GloasSpecBase):
         )
         signing_root = self.compute_signing_root(indexed_attestation.data, domain)
         return bls.FastAggregateVerify(public_keys, signing_root, indexed_attestation.signature)
+
+    def is_valid_indexed_payload_attestation(
+        self, state: BeaconState, payload_attestation: IndexedPayloadAttestation
+    ) -> bool:
+        """Check a payload attestation has non-empty, sorted indices and a valid signature."""
+        attesting_indices = list(payload_attestation.attesting_indices)
+        if len(attesting_indices) == 0 or attesting_indices != sorted(attesting_indices):
+            return False
+        public_keys = [state.validators[index].public_key for index in attesting_indices]
+        domain = self.get_domain(
+            state,
+            DOMAIN_PTC_ATTESTER,
+            self.compute_epoch_at_slot(payload_attestation.data.slot),
+        )
+        signing_root = self.compute_signing_root(payload_attestation.data, domain)
+        return bls.FastAggregateVerify(public_keys, signing_root, payload_attestation.signature)
 
     def is_valid_deposit_signature(
         self,

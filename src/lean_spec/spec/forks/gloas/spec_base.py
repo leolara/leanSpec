@@ -21,6 +21,8 @@ from lean_spec.spec.forks.gloas.containers.beacon_chain import (
     BuilderPendingPayment,
     ConsolidationRequest,
     IndexedAttestation,
+    IndexedPayloadAttestation,
+    PayloadAttestation,
     PendingDeposits,
     ProposerSlashing,
     SignedBLSToExecutionChange,
@@ -181,6 +183,20 @@ class GloasSpecBase(GloasProtocol):
         self, state: BeaconState, indexed_attestation: IndexedAttestation
     ) -> bool:
         """Check that an indexed attestation has sorted, unique indices and a valid signature."""
+        ...
+
+    @abstractmethod
+    def is_valid_indexed_payload_attestation(
+        self, state: BeaconState, payload_attestation: IndexedPayloadAttestation
+    ) -> bool:
+        """Check a payload attestation has non-empty, sorted indices and a valid signature."""
+        ...
+
+    @abstractmethod
+    def get_indexed_payload_attestation(
+        self, state: BeaconState, payload_attestation: PayloadAttestation
+    ) -> IndexedPayloadAttestation:
+        """Return the indexed form of a payload attestation, resolved against its committee."""
         ...
 
     @abstractmethod

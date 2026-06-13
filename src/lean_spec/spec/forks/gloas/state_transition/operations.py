@@ -37,6 +37,7 @@ from lean_spec.spec.forks.gloas.containers.beacon_chain import (
     BuilderPendingPayments,
     ConsolidationRequest,
     DepositRequest,
+    PayloadAttestation,
     PendingConsolidation,
     PendingConsolidations,
     PendingDeposit,
@@ -544,3 +545,25 @@ class OperationMixin(GloasSpecBase):
             ),
         ]
         return state.model_copy(update={"pending_deposits": PendingDeposits(data=queued)})
+
+    def process_payload_attestation(
+        self, state: BeaconState, payload_attestation: PayloadAttestation
+    ) -> BeaconState:
+        """
+        Validate a payload timeliness attestation for the parent block.
+
+        The attestation only confirms the parent block's payload, so it leaves the
+        state unchanged. It must reference the parent block at the previous slot and
+        carry a valid aggregate signature from the payload timeliness committee.
+
+        Raises:
+            AssertionError: If the attestation targets the wrong block or slot, or fails to verify.
+        """
+        data = payload_attestation.data
+        assert data.beacon_block_root == state.latest_block_header.parent_root
+        assert int(data.slot) + 1 == int(state.slot)
+        indexed_payload_attestation = self.get_indexed_payload_attestation(
+            state, payload_attestation
+        )
+        assert self.is_valid_indexed_payload_attestation(state, indexed_payload_attestation)
+        return state
