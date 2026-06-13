@@ -16,11 +16,12 @@ from __future__ import annotations
 import pytest
 import yaml
 
+from pyspec_vectors_testing.handlers.epoch_processing import run_epoch_processing_case
 from pyspec_vectors_testing.handlers.operations import run_operations_case
 from pyspec_vectors_testing.handlers.shuffling import run_shuffling_case
 
 # Runners whose cases this harness knows how to execute.
-SUPPORTED_RUNNERS = frozenset({"shuffling", "operations"})
+SUPPORTED_RUNNERS = frozenset({"shuffling", "operations", "epoch_processing"})
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -54,6 +55,8 @@ class VectorCaseItem(pytest.Item):
             run_shuffling_case(case_dir)
         elif runner == "operations":
             run_operations_case(case_dir, manifest.get("handler"))
+        elif runner == "epoch_processing":
+            run_epoch_processing_case(case_dir, manifest.get("handler"))
         else:
             pytest.skip(f"runner not yet supported: {runner}")
 

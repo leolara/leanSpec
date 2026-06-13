@@ -13,6 +13,7 @@ from lean_spec.spec.forks.gloas.accessors import AccessorMixin
 from lean_spec.spec.forks.gloas.predicates import PredicatesMixin
 from lean_spec.spec.forks.gloas.signing import SignatureMixin
 from lean_spec.spec.forks.gloas.spec_base import GloasSpecBase
+from lean_spec.spec.forks.gloas.state_transition.epoch import EpochMixin
 from lean_spec.spec.forks.gloas.state_transition.mutators import MutatorMixin
 from lean_spec.spec.forks.gloas.state_transition.operations import OperationMixin
 
@@ -25,6 +26,7 @@ class GloasSpec(
     AccessorMixin,
     MutatorMixin,
     OperationMixin,
+    EpochMixin,
     GloasSpecBase,
 ):
     """The standalone mainnet Gloas reference spec."""
