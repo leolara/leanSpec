@@ -124,8 +124,8 @@ class BLSToExecutionChange(Container):
 
     validator_index: ValidatorIndex
     """Validator index."""
-    from_bls_pubkey: BLSPubkey
-    """From bls pubkey."""
+    from_bls_public_key: BLSPubkey
+    """From bls public key."""
     to_execution_address: ExecutionAddress
     """To execution address."""
 
@@ -259,8 +259,8 @@ class ExecutionPayloadBid(Container):
     """Parent block root."""
     block_hash: Hash32
     """Block hash."""
-    prev_randao: Bytes32
-    """Prev randao."""
+    previous_randao: Bytes32
+    """Previous randao."""
     fee_recipient: ExecutionAddress
     """Fee recipient."""
     gas_limit: Uint64
@@ -338,8 +338,8 @@ class WithdrawalRequest(Container):
 
     source_address: ExecutionAddress
     """Source address."""
-    validator_pubkey: BLSPubkey
-    """Validator pubkey."""
+    validator_public_key: BLSPubkey
+    """Validator public key."""
     amount: Gwei
     """Amount."""
 
@@ -349,10 +349,10 @@ class ConsolidationRequest(Container):
 
     source_address: ExecutionAddress
     """Source address."""
-    source_pubkey: BLSPubkey
-    """Source pubkey."""
-    target_pubkey: BLSPubkey
-    """Target pubkey."""
+    source_public_key: BLSPubkey
+    """Source public key."""
+    target_public_key: BLSPubkey
+    """Target public key."""
 
 
 class Deposits(SSZList[DepositRequest]):
@@ -504,8 +504,8 @@ class Validator(Container):
     """Withdrawable epoch."""
 
 
-class Pubkeys(SSZVector[BLSPubkey]):
-    """Pubkeys."""
+class PublicKeys(SSZVector[BLSPubkey]):
+    """Public keys."""
 
     LENGTH = 32 if _MINIMAL else 512
 
@@ -513,10 +513,10 @@ class Pubkeys(SSZVector[BLSPubkey]):
 class SyncCommittee(Container):
     """Sync committee."""
 
-    pubkeys: Pubkeys
-    """Pubkeys."""
-    aggregate_pubkey: BLSPubkey
-    """Aggregate pubkey."""
+    public_keys: PublicKeys
+    """Public keys."""
+    aggregate_public_key: BLSPubkey
+    """Aggregate public key."""
 
 
 class HistoricalSummary(Container):
@@ -914,8 +914,8 @@ class ExecutionPayload(Container):
     """Receipts root."""
     logs_bloom: FixedBytes256
     """Logs bloom."""
-    prev_randao: Bytes32
-    """Prev randao."""
+    previous_randao: Bytes32
+    """Previous randao."""
     block_number: Uint64
     """Block number."""
     gas_limit: Uint64
