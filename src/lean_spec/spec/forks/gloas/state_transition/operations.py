@@ -624,3 +624,30 @@ class OperationMixin(GloasSpecBase):
             )
 
         return state.model_copy(update={"latest_execution_payload_bid": bid})
+
+    def process_withdrawals(self, state: BeaconState) -> BeaconState:
+        """
+        Apply the deterministic withdrawal sweep committed to by the parent payload.
+
+        Withdrawals are fully determined by the state, so this takes no payload. When
+        the parent block was empty there is nothing to withdraw. Otherwise the expected
+        sweep is applied and every per-stage withdrawal cursor is advanced.
+        """
+        # An empty parent block carries no payload, so there is nothing to withdraw.
+        if state.latest_block_hash != state.latest_execution_payload_bid.block_hash:
+            return state
+
+        expected = self.get_expected_withdrawals(state)
+        state = self.apply_withdrawals(state, expected.withdrawals)
+        state = self.update_next_withdrawal_index(state, expected.withdrawals)
+        state = self.update_payload_expected_withdrawals(state, expected.withdrawals)
+        state = self.update_builder_pending_withdrawals(
+            state, expected.processed_builder_withdrawals_count
+        )
+        state = self.update_pending_partial_withdrawals(
+            state, expected.processed_partial_withdrawals_count
+        )
+        state = self.update_next_withdrawal_builder_index(
+            state, expected.processed_builders_sweep_count
+        )
+        return self.update_next_withdrawal_validator_index(state, expected.withdrawals)

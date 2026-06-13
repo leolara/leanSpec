@@ -162,6 +162,22 @@ class PredicatesMixin(GloasSpecBase):
         """Strip the builder flag bit to recover a builder-registry index."""
         return BuilderIndex(int(validator_index) & ~int(BUILDER_INDEX_FLAG))
 
+    def convert_builder_index_to_validator_index(
+        self, builder_index: BuilderIndex
+    ) -> ValidatorIndex:
+        """Set the builder flag bit to project a builder index into the validator space."""
+        return ValidatorIndex(int(builder_index) | int(BUILDER_INDEX_FLAG))
+
+    def is_eligible_for_partial_withdrawals(self, validator: Validator, balance: Gwei) -> bool:
+        """Check a non-exiting validator at full effective balance has excess to withdraw."""
+        has_sufficient_effective_balance = validator.effective_balance >= MIN_ACTIVATION_BALANCE
+        has_excess_balance = balance > MIN_ACTIVATION_BALANCE
+        return (
+            validator.exit_epoch == FAR_FUTURE_EPOCH
+            and has_sufficient_effective_balance
+            and has_excess_balance
+        )
+
     def is_builder_withdrawal_credential(self, withdrawal_credentials: Bytes32) -> bool:
         """Check whether withdrawal credentials carry the builder prefix."""
         return bytes(withdrawal_credentials)[:1] == BUILDER_WITHDRAWAL_PREFIX

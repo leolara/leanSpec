@@ -10,6 +10,7 @@ extends a minimal protocol carrying the fork identity.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from typing import ClassVar
 
 from lean_spec.spec.forks.gloas.config import BlobParameters
@@ -30,6 +31,7 @@ from lean_spec.spec.forks.gloas.containers.beacon_chain import (
     SignedExecutionPayloadBid,
     SignedVoluntaryExit,
     Validator,
+    Withdrawal,
     WithdrawalRequest,
 )
 from lean_spec.spec.forks.gloas.containers.primitives import (
@@ -47,6 +49,7 @@ from lean_spec.spec.forks.gloas.containers.primitives import (
     ValidatorIndex,
     Version,
 )
+from lean_spec.spec.forks.gloas.helpers.withdrawals import ExpectedWithdrawals
 from lean_spec.spec.ssz import Bytes32, Uint64
 from lean_spec.spec.ssz.bitfields import BaseBitvector
 from lean_spec.spec.ssz.ssz_base import SSZType
@@ -173,6 +176,18 @@ class GloasSpecBase(GloasProtocol):
         self, validator_index: ValidatorIndex
     ) -> BuilderIndex:
         """Strip the builder flag bit to recover a builder-registry index."""
+        ...
+
+    @abstractmethod
+    def convert_builder_index_to_validator_index(
+        self, builder_index: BuilderIndex
+    ) -> ValidatorIndex:
+        """Set the builder flag bit to project a builder index into the validator space."""
+        ...
+
+    @abstractmethod
+    def is_eligible_for_partial_withdrawals(self, validator: Validator, balance: Gwei) -> bool:
+        """Check a non-exiting validator at full effective balance has excess to withdraw."""
         ...
 
     @abstractmethod
@@ -328,6 +343,11 @@ class GloasSpecBase(GloasProtocol):
         self, state: BeaconState, builder_index: BuilderIndex
     ) -> Gwei:
         """Return the gwei a builder has queued across pending withdrawals and payments."""
+        ...
+
+    @abstractmethod
+    def get_expected_withdrawals(self, state: BeaconState) -> ExpectedWithdrawals:
+        """Build the full ordered withdrawal sweep and each stage's processed count."""
         ...
 
     @abstractmethod
@@ -487,6 +507,55 @@ class GloasSpecBase(GloasProtocol):
         slot: Slot,
     ) -> BeaconState:
         """Register a new builder from a valid deposit, or top up an existing one."""
+        ...
+
+    @abstractmethod
+    def apply_withdrawals(
+        self, state: BeaconState, withdrawals: Sequence[Withdrawal]
+    ) -> BeaconState:
+        """Deduct each withdrawal from its builder or validator balance."""
+        ...
+
+    @abstractmethod
+    def update_next_withdrawal_index(
+        self, state: BeaconState, withdrawals: Sequence[Withdrawal]
+    ) -> BeaconState:
+        """Advance the next withdrawal index past the last withdrawal in the block."""
+        ...
+
+    @abstractmethod
+    def update_payload_expected_withdrawals(
+        self, state: BeaconState, withdrawals: Sequence[Withdrawal]
+    ) -> BeaconState:
+        """Record the withdrawals the next execution payload must honor."""
+        ...
+
+    @abstractmethod
+    def update_builder_pending_withdrawals(
+        self, state: BeaconState, processed_builder_withdrawals_count: Uint64
+    ) -> BeaconState:
+        """Drop the builder pending withdrawals consumed by this block from the front."""
+        ...
+
+    @abstractmethod
+    def update_pending_partial_withdrawals(
+        self, state: BeaconState, processed_partial_withdrawals_count: Uint64
+    ) -> BeaconState:
+        """Drop the pending partial withdrawals consumed by this block from the front."""
+        ...
+
+    @abstractmethod
+    def update_next_withdrawal_builder_index(
+        self, state: BeaconState, processed_builders_sweep_count: Uint64
+    ) -> BeaconState:
+        """Advance the builder sweep cursor past the builders this block swept."""
+        ...
+
+    @abstractmethod
+    def update_next_withdrawal_validator_index(
+        self, state: BeaconState, withdrawals: Sequence[Withdrawal]
+    ) -> BeaconState:
+        """Advance the validator sweep cursor for the next block."""
         ...
 
     @abstractmethod

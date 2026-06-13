@@ -6,6 +6,8 @@ in place. Balance and validator edits rebuild the affected collection; the
 exit-churn helpers also return the queue epoch they computed.
 """
 
+from collections.abc import Sequence
+
 from lean_spec.spec.forks.gloas.config import (
     CHURN_LIMIT_QUOTIENT_GLOAS,
     CONSOLIDATION_CHURN_LIMIT_QUOTIENT,
@@ -25,12 +27,16 @@ from lean_spec.spec.forks.gloas.containers.beacon_chain import (
     Balances,
     BeaconState,
     Builder,
+    BuilderPendingWithdrawals,
     Builders,
+    PayloadExpectedWithdrawals,
     PendingDeposit,
     PendingDeposits,
+    PendingPartialWithdrawals,
     Slashings,
     Validator,
     Validators,
+    Withdrawal,
 )
 from lean_spec.spec.forks.gloas.containers.primitives import (
     BLSPubkey,
@@ -41,16 +47,19 @@ from lean_spec.spec.forks.gloas.containers.primitives import (
     Gwei,
     Slot,
     ValidatorIndex,
+    WithdrawalIndex,
 )
 from lean_spec.spec.forks.gloas.preset import (
     EFFECTIVE_BALANCE_INCREMENT,
     EPOCHS_PER_SLASHINGS_VECTOR,
+    MAX_VALIDATORS_PER_WITHDRAWALS_SWEEP,
+    MAX_WITHDRAWALS_PER_PAYLOAD,
     MIN_ACTIVATION_BALANCE,
     MIN_SLASHING_PENALTY_QUOTIENT_ELECTRA,
     WHISTLEBLOWER_REWARD_QUOTIENT_ELECTRA,
 )
 from lean_spec.spec.forks.gloas.spec_base import GloasSpecBase
-from lean_spec.spec.ssz import Boolean, Bytes32, Uint8
+from lean_spec.spec.ssz import Boolean, Bytes32, Uint8, Uint64
 
 
 class MutatorMixin(GloasSpecBase):
@@ -330,3 +339,95 @@ class MutatorMixin(GloasSpecBase):
         )
         builders[builder_index] = topped_up
         return state.model_copy(update={"builders": Builders(data=builders)})
+
+    def apply_withdrawals(
+        self, state: BeaconState, withdrawals: Sequence[Withdrawal]
+    ) -> BeaconState:
+        """Deduct each withdrawal from its builder or validator balance."""
+        for withdrawal in withdrawals:
+            if self.is_builder_index(withdrawal.validator_index):
+                builder_index = int(
+                    self.convert_validator_index_to_builder_index(withdrawal.validator_index)
+                )
+                builders = list(state.builders)
+                builder = builders[builder_index]
+                # A builder balance cannot go negative, so clamp the deduction to it.
+                deduction = min(int(withdrawal.amount), int(builder.balance))
+                builders[builder_index] = builder.model_copy(
+                    update={"balance": Gwei(int(builder.balance) - deduction)}
+                )
+                state = state.model_copy(update={"builders": Builders(data=builders)})
+            else:
+                state = self.decrease_balance(state, withdrawal.validator_index, withdrawal.amount)
+        return state
+
+    def update_next_withdrawal_index(
+        self, state: BeaconState, withdrawals: Sequence[Withdrawal]
+    ) -> BeaconState:
+        """Advance the next withdrawal index past the last withdrawal in the block."""
+        if len(withdrawals) == 0:
+            return state
+        latest_withdrawal = withdrawals[-1]
+        return state.model_copy(
+            update={"next_withdrawal_index": WithdrawalIndex(int(latest_withdrawal.index) + 1)}
+        )
+
+    def update_payload_expected_withdrawals(
+        self, state: BeaconState, withdrawals: Sequence[Withdrawal]
+    ) -> BeaconState:
+        """Record the withdrawals the next execution payload must honor."""
+        return state.model_copy(
+            update={
+                "payload_expected_withdrawals": PayloadExpectedWithdrawals(data=list(withdrawals))
+            }
+        )
+
+    def update_builder_pending_withdrawals(
+        self, state: BeaconState, processed_builder_withdrawals_count: Uint64
+    ) -> BeaconState:
+        """Drop the builder pending withdrawals consumed by this block from the front."""
+        remaining = list(state.builder_pending_withdrawals)[
+            int(processed_builder_withdrawals_count) :
+        ]
+        return state.model_copy(
+            update={"builder_pending_withdrawals": BuilderPendingWithdrawals(data=remaining)}
+        )
+
+    def update_pending_partial_withdrawals(
+        self, state: BeaconState, processed_partial_withdrawals_count: Uint64
+    ) -> BeaconState:
+        """Drop the pending partial withdrawals consumed by this block from the front."""
+        remaining = list(state.pending_partial_withdrawals)[
+            int(processed_partial_withdrawals_count) :
+        ]
+        return state.model_copy(
+            update={"pending_partial_withdrawals": PendingPartialWithdrawals(data=remaining)}
+        )
+
+    def update_next_withdrawal_builder_index(
+        self, state: BeaconState, processed_builders_sweep_count: Uint64
+    ) -> BeaconState:
+        """Advance the builder sweep cursor past the builders this block swept."""
+        if len(state.builders) == 0:
+            return state
+        next_index = int(state.next_withdrawal_builder_index) + int(processed_builders_sweep_count)
+        return state.model_copy(
+            update={"next_withdrawal_builder_index": BuilderIndex(next_index % len(state.builders))}
+        )
+
+    def update_next_withdrawal_validator_index(
+        self, state: BeaconState, withdrawals: Sequence[Withdrawal]
+    ) -> BeaconState:
+        """Advance the validator sweep cursor for the next block."""
+        # A full payload resumes right after the last swept validator;
+        # a partial sweep advances by the fixed sweep span instead.
+        if len(withdrawals) == int(MAX_WITHDRAWALS_PER_PAYLOAD):
+            next_validator_index = ValidatorIndex(
+                (int(withdrawals[-1].validator_index) + 1) % len(state.validators)
+            )
+        else:
+            next_index = int(state.next_withdrawal_validator_index) + int(
+                MAX_VALIDATORS_PER_WITHDRAWALS_SWEEP
+            )
+            next_validator_index = ValidatorIndex(next_index % len(state.validators))
+        return state.model_copy(update={"next_withdrawal_validator_index": next_validator_index})

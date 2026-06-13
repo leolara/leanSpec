@@ -38,8 +38,8 @@ class OperationSpec:
     """How one operations handler maps to a spec method and its object file."""
 
     method: str
-    container: type[SSZType]
-    file_stem: str
+    container: type[SSZType] | None
+    file_stem: str | None
 
 
 # One entry per supported operations handler; unsupported handlers are skipped.
@@ -104,6 +104,11 @@ OPERATION_SPECS: dict[str, OperationSpec] = {
         container=BeaconBlock,
         file_stem="block",
     ),
+    "withdrawals": OperationSpec(
+        method="process_withdrawals",
+        container=None,
+        file_stem=None,
+    ),
 }
 
 
@@ -123,14 +128,23 @@ def run_operations_case(case_dir: Path, handler: str) -> None:
     bls.bls_active = bls_is_active(load_meta(case_dir))
 
     pre_state = BeaconState.decode_bytes(decompress_ssz(case_dir / "pre.ssz_snappy"))
-    operation = operation_spec.container.decode_bytes(
-        decompress_ssz(case_dir / f"{operation_spec.file_stem}.ssz_snappy")
-    )
+
+    # Some operations are stateless sweeps with no operation object; the rest read
+    # their object from the case's single ssz_snappy file.
+    operation_args: tuple[SSZType, ...]
+    if operation_spec.container is None or operation_spec.file_stem is None:
+        operation_args = ()
+    else:
+        operation_args = (
+            operation_spec.container.decode_bytes(
+                decompress_ssz(case_dir / f"{operation_spec.file_stem}.ssz_snappy")
+            ),
+        )
 
     post_path = case_dir / "post.ssz_snappy"
     if post_path.exists():
         expected_state = BeaconState.decode_bytes(decompress_ssz(post_path))
-        actual_state = process(pre_state, operation)
+        actual_state = process(pre_state, *operation_args)
         actual_root = hash_tree_root(actual_state)
         expected_root = hash_tree_root(expected_state)
         assert actual_root == expected_root, (
@@ -143,4 +157,4 @@ def run_operations_case(case_dir: Path, handler: str) -> None:
         # The upstream runner treats any raised exception as a rejection, since a
         # bad operation can fail an assert or fault on an out-of-range lookup.
         with pytest.raises(Exception):  # noqa: B017, PT011
-            process(pre_state, operation)
+            process(pre_state, *operation_args)
