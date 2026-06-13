@@ -38,6 +38,7 @@ from lean_spec.spec.forks.gloas.containers.beacon_chain import (
     PendingConsolidations,
     PendingDeposits,
     PreviousEpochParticipation,
+    ProposerLookahead,
     PtcWindow,
     RandaoMixes,
     Slashings,
@@ -56,6 +57,7 @@ from lean_spec.spec.forks.gloas.preset import (
     EPOCHS_PER_ETH1_VOTING_PERIOD,
     EPOCHS_PER_HISTORICAL_VECTOR,
     EPOCHS_PER_SLASHINGS_VECTOR,
+    EPOCHS_PER_SYNC_COMMITTEE_PERIOD,
     HYSTERESIS_DOWNWARD_MULTIPLIER,
     HYSTERESIS_QUOTIENT,
     HYSTERESIS_UPWARD_MULTIPLIER,
@@ -436,6 +438,29 @@ class EpochMixin(GloasSpecBase):
         ]
         rolled_window = [*window[_SLOTS_PER_EPOCH:], *lookahead_committees]
         return state.model_copy(update={"ptc_window": PtcWindow(data=rolled_window)})
+
+    def process_sync_committee_updates(self, state: BeaconState) -> BeaconState:
+        """Rotate the next sync committee into current and sample a new next at period bounds."""
+        next_epoch = int(self.get_current_epoch(state)) + 1
+        if next_epoch % int(EPOCHS_PER_SYNC_COMMITTEE_PERIOD) == 0:
+            return state.model_copy(
+                update={
+                    "current_sync_committee": state.next_sync_committee,
+                    "next_sync_committee": self.get_next_sync_committee(state),
+                }
+            )
+        return state
+
+    def process_proposer_lookahead(self, state: BeaconState) -> BeaconState:
+        """Shift the proposer lookahead forward and fill the newly exposed epoch."""
+        lookahead = list(state.proposer_lookahead)
+        last_epoch_proposers = self.get_beacon_proposer_indices(
+            state, Epoch(int(self.get_current_epoch(state)) + _MIN_SEED_LOOKAHEAD + 1)
+        )
+        rolled_lookahead = [*lookahead[_SLOTS_PER_EPOCH:], *last_epoch_proposers]
+        return state.model_copy(
+            update={"proposer_lookahead": ProposerLookahead(data=rolled_lookahead)}
+        )
 
     def process_eth1_data_reset(self, state: BeaconState) -> BeaconState:
         """Clear the eth1 data vote tally at the end of each voting period."""

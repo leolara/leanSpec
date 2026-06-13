@@ -13,6 +13,7 @@ wrapped back into its domain type.
 from collections.abc import Sequence
 from hashlib import sha256
 
+from lean_spec.spec.crypto import bls
 from lean_spec.spec.forks.gloas.config import (
     BLOB_SCHEDULE,
     CHURN_LIMIT_QUOTIENT_GLOAS,
@@ -26,7 +27,9 @@ from lean_spec.spec.forks.gloas.constants import (
     BUILDER_PAYMENT_THRESHOLD_DENOMINATOR,
     BUILDER_PAYMENT_THRESHOLD_NUMERATOR,
     DOMAIN_BEACON_ATTESTER,
+    DOMAIN_BEACON_PROPOSER,
     DOMAIN_PTC_ATTESTER,
+    DOMAIN_SYNC_COMMITTEE,
     FAR_FUTURE_EPOCH,
     GENESIS_EPOCH,
     TIMELY_HEAD_FLAG_INDEX,
@@ -44,9 +47,12 @@ from lean_spec.spec.forks.gloas.containers.beacon_chain import (
     IndexedpayloadattestationAttestingIndices,
     PayloadAttestation,
     PtcWindowElement,
+    PublicKeys,
+    SyncCommittee,
     Withdrawal,
 )
 from lean_spec.spec.forks.gloas.containers.primitives import (
+    BLSPubkey,
     BuilderIndex,
     CommitteeIndex,
     DomainType,
@@ -84,6 +90,7 @@ from lean_spec.spec.forks.gloas.preset import (
     PTC_SIZE,
     SLOTS_PER_EPOCH,
     SLOTS_PER_HISTORICAL_ROOT,
+    SYNC_COMMITTEE_SIZE,
     TARGET_COMMITTEE_SIZE,
 )
 from lean_spec.spec.forks.gloas.spec_base import GloasSpecBase
@@ -289,6 +296,54 @@ class AccessorMixin(GloasSpecBase):
         per_slot_balance = int(self.get_total_active_balance(state)) // _SLOTS_PER_EPOCH
         quorum = per_slot_balance * int(BUILDER_PAYMENT_THRESHOLD_NUMERATOR)
         return Uint64(quorum // int(BUILDER_PAYMENT_THRESHOLD_DENOMINATOR))
+
+    def compute_proposer_indices(
+        self,
+        state: BeaconState,
+        epoch: Epoch,
+        seed: Bytes32,
+        indices: Sequence[ValidatorIndex],
+    ) -> list[ValidatorIndex]:
+        """Sample one balance-weighted proposer per slot of an epoch from the candidates."""
+        start_slot = int(self.compute_start_slot_at_epoch(epoch))
+        per_slot_seeds = [
+            sha256(bytes(seed) + uint64_to_bytes(Slot(start_slot + slot_offset))).digest()
+            for slot_offset in range(_SLOTS_PER_EPOCH)
+        ]
+        return [
+            self.compute_balance_weighted_selection(
+                state, indices, Bytes32(per_slot_seed), Uint64(1), shuffle_indices=True
+            )[0]
+            for per_slot_seed in per_slot_seeds
+        ]
+
+    def get_beacon_proposer_indices(self, state: BeaconState, epoch: Epoch) -> list[ValidatorIndex]:
+        """Return the proposer for each slot of an epoch, drawn from unslashed active validators."""
+        candidate_indices = [
+            validator_index
+            for validator_index in self.get_active_validator_indices(state, epoch)
+            if not state.validators[int(validator_index)].slashed
+        ]
+        seed = self.get_seed(state, epoch, DOMAIN_BEACON_PROPOSER)
+        return self.compute_proposer_indices(state, epoch, seed, candidate_indices)
+
+    def get_next_sync_committee_indices(self, state: BeaconState) -> list[ValidatorIndex]:
+        """Sample the next sync committee's members, balance-weighted with duplicates."""
+        epoch = Epoch(int(self.get_current_epoch(state)) + 1)
+        seed = self.get_seed(state, epoch, DOMAIN_SYNC_COMMITTEE)
+        active_indices = self.get_active_validator_indices(state, epoch)
+        return self.compute_balance_weighted_selection(
+            state, active_indices, seed, SYNC_COMMITTEE_SIZE, shuffle_indices=True
+        )
+
+    def get_next_sync_committee(self, state: BeaconState) -> SyncCommittee:
+        """Build the next sync committee from its sampled members and their aggregate key."""
+        member_indices = self.get_next_sync_committee_indices(state)
+        public_keys = [state.validators[int(index)].public_key for index in member_indices]
+        return SyncCommittee(
+            public_keys=PublicKeys(data=public_keys),
+            aggregate_public_key=BLSPubkey(bls.eth_aggregate_pubkeys(public_keys)),
+        )
 
     def get_unslashed_participating_indices(
         self, state: BeaconState, flag_index: int, epoch: Epoch

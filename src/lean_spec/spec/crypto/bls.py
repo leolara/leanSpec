@@ -148,6 +148,23 @@ def eth_fast_aggregate_verify(  # noqa: N802
     return FastAggregateVerify(public_keys, message, signature)
 
 
+def eth_aggregate_pubkeys(public_keys: Sequence[BLSPubkey]) -> BLSPubkey:  # noqa: N802
+    """
+    Return the aggregate public key for a non-empty key set.
+
+    Aggregation is elliptic-curve point addition over the decoded keys. It runs
+    even when the backend is inactive, since the aggregate is a deterministic part
+    of the state and must stay byte-exact regardless of signature verification.
+    """
+    assert len(public_keys) > 0
+    if bls_active:
+        assert all(KeyValidate(public_key) for public_key in public_keys)
+    aggregate_point = G1Point.from_compressed_bytes(bytes(public_keys[0]))
+    for public_key in public_keys[1:]:
+        aggregate_point = aggregate_point + G1Point.from_compressed_bytes(bytes(public_key))
+    return BLSPubkey(aggregate_point.to_compressed_bytes())
+
+
 def AggregateVerify(  # noqa: N802
     public_keys: Sequence[BLSPubkey], messages: Sequence[bytes], signature: BLSSignature
 ) -> bool:

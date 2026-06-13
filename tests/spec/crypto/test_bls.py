@@ -136,6 +136,22 @@ class TestAggregate:
             is True
         )
 
+    def test_eth_aggregate_pubkeys_matches_fast_aggregate_verify(self) -> None:
+        """The aggregate of two keys verifies their combined signature on its own."""
+        public_key_a = bls.SkToPk(SECRET_KEY_A)
+        public_key_b = bls.SkToPk(SECRET_KEY_B)
+        aggregate_public_key = bls.eth_aggregate_pubkeys([public_key_a, public_key_b])
+        aggregate_signature = bls.Aggregate(
+            [bls.Sign(SECRET_KEY_A, MESSAGE), bls.Sign(SECRET_KEY_B, MESSAGE)]
+        )
+        assert isinstance(aggregate_public_key, Bytes48)
+        assert bls.FastAggregateVerify([aggregate_public_key], MESSAGE, aggregate_signature) is True
+
+    def test_eth_aggregate_pubkeys_single_key_is_identity(self) -> None:
+        """Aggregating a single key returns that key unchanged."""
+        public_key = bls.SkToPk(SECRET_KEY_A)
+        assert bls.eth_aggregate_pubkeys([public_key]) == public_key
+
 
 class TestKeyValidate:
     """Public-key validation against the prime-order subgroup."""

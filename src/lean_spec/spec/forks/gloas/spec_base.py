@@ -34,6 +34,7 @@ from lean_spec.spec.forks.gloas.containers.beacon_chain import (
     SignedBLSToExecutionChange,
     SignedExecutionPayloadBid,
     SignedVoluntaryExit,
+    SyncCommittee,
     Validator,
     Withdrawal,
     WithdrawalRequest,
@@ -382,6 +383,16 @@ class GloasSpecBase(GloasProtocol):
     @abstractmethod
     def get_builder_payment_quorum_threshold(self, state: BeaconState) -> Uint64:
         """Return the per-slot weight a builder payment must reach to be honored."""
+        ...
+
+    @abstractmethod
+    def get_beacon_proposer_indices(self, state: BeaconState, epoch: Epoch) -> list[ValidatorIndex]:
+        """Return the proposer for each slot of an epoch, drawn from unslashed active validators."""
+        ...
+
+    @abstractmethod
+    def get_next_sync_committee(self, state: BeaconState) -> SyncCommittee:
+        """Build the next sync committee from its sampled members and their aggregate key."""
         ...
 
     @abstractmethod
