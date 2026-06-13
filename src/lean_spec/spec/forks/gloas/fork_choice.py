@@ -11,8 +11,6 @@ The execution engine and blob-data availability are treated as trusted here: the
 fork-choice vectors ship payloads the execution layer is assumed to accept.
 """
 
-from copy import deepcopy
-
 from lean_spec.spec.crypto import bls
 from lean_spec.spec.crypto.merkleization import hash_tree_root
 from lean_spec.spec.forks.gloas.config import (
@@ -416,9 +414,9 @@ class ForkChoiceMixin(GloasSpecBase):
 
     def compute_pulled_up_tip(self, store: Store, block_root: Root) -> None:
         """Pull a block's post-state to its epoch boundary and record realized checkpoints."""
-        state = self.process_justification_and_finalization(
-            deepcopy(store.block_states[block_root])
-        )
+        # The epoch transition rebuilds state through copies, so the stored state
+        # is never mutated and can be passed straight in.
+        state = self.process_justification_and_finalization(store.block_states[block_root])
         store.unrealized_justifications[block_root] = state.current_justified_checkpoint
         self.update_unrealized_checkpoints(
             store, state.current_justified_checkpoint, state.finalized_checkpoint
@@ -461,7 +459,7 @@ class ForkChoiceMixin(GloasSpecBase):
     def store_target_checkpoint_state(self, store: Store, target: Checkpoint) -> None:
         """Cache the state at a target checkpoint, advancing empty slots if needed."""
         if target not in store.checkpoint_states:
-            base_state = deepcopy(store.block_states[target.root])
+            base_state = store.block_states[target.root]
             target_slot = self.compute_start_slot_at_epoch(target.epoch)
             if int(base_state.slot) < int(target_slot):
                 base_state = self.process_slots(base_state, target_slot)
@@ -531,9 +529,12 @@ class ForkChoiceMixin(GloasSpecBase):
         )
         assert store.finalized_checkpoint.root == finalized_checkpoint_block
 
-        state = deepcopy(store.block_states[block.parent_root])
+        # The transition rebuilds state through copies, so the parent state in the
+        # store is never mutated and can be passed straight in.
         block_root = Root(hash_tree_root(block))
-        state = self.state_transition(state, signed_block, validate_result=True)
+        state = self.state_transition(
+            store.block_states[block.parent_root], signed_block, validate_result=True
+        )
 
         head = self.get_head(store)
         store.blocks[block_root] = block
