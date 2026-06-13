@@ -137,6 +137,11 @@ timeout = 600
 [tool.coverage.run]
 source = ["src"]
 branch = true
+# The Gloas fork is a standalone literal port verified by upstream consensus
+# spec-test vectors, not by unit tests under tests/ (it is exempt from the
+# mirrored-pytest rule). Exclude it from the unit-test coverage gate, which only
+# measures the lean protocol and shared libraries.
+omit = ["src/lean_spec/spec/forks/gloas/*"]
 
 [tool.coverage.report]
 fail_under = 90
