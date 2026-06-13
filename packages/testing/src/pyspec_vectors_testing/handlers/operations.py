@@ -109,6 +109,11 @@ OPERATION_SPECS: dict[str, OperationSpec] = {
         container=None,
         file_stem=None,
     ),
+    "parent_execution_payload": OperationSpec(
+        method="process_parent_execution_payload",
+        container=BeaconBlock,
+        file_stem="block",
+    ),
 }
 
 

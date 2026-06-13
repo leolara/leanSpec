@@ -27,8 +27,13 @@ from lean_spec.spec.forks.gloas.containers.beacon_chain import (
     Balances,
     BeaconState,
     Builder,
+    BuilderPendingPayment,
+    BuilderPendingPayments,
+    BuilderPendingWithdrawal,
     BuilderPendingWithdrawals,
     Builders,
+    ExecutionPayloadAvailability,
+    ExecutionRequests,
     PayloadExpectedWithdrawals,
     PendingDeposit,
     PendingDeposits,
@@ -56,10 +61,15 @@ from lean_spec.spec.forks.gloas.preset import (
     MAX_WITHDRAWALS_PER_PAYLOAD,
     MIN_ACTIVATION_BALANCE,
     MIN_SLASHING_PENALTY_QUOTIENT_ELECTRA,
+    SLOTS_PER_EPOCH,
+    SLOTS_PER_HISTORICAL_ROOT,
     WHISTLEBLOWER_REWARD_QUOTIENT_ELECTRA,
 )
 from lean_spec.spec.forks.gloas.spec_base import GloasSpecBase
 from lean_spec.spec.ssz import Boolean, Bytes32, Uint8, Uint64
+
+_SLOTS_PER_EPOCH = int(SLOTS_PER_EPOCH)
+_SLOTS_PER_HISTORICAL_ROOT = int(SLOTS_PER_HISTORICAL_ROOT)
 
 
 class MutatorMixin(GloasSpecBase):
@@ -431,3 +441,66 @@ class MutatorMixin(GloasSpecBase):
             )
             next_validator_index = ValidatorIndex(next_index % len(state.validators))
         return state.model_copy(update={"next_withdrawal_validator_index": next_validator_index})
+
+    def settle_builder_payment(self, state: BeaconState, payment_index: int) -> BeaconState:
+        """Convert a slot's pending builder payment into a queued withdrawal and clear it."""
+        assert payment_index < len(state.builder_pending_payments)
+        payment = state.builder_pending_payments[payment_index]
+        if int(payment.withdrawal.amount) > 0:
+            withdrawals = [*list(state.builder_pending_withdrawals), payment.withdrawal]
+            state = state.model_copy(
+                update={"builder_pending_withdrawals": BuilderPendingWithdrawals(data=withdrawals)}
+            )
+        payments = list(state.builder_pending_payments)
+        payments[payment_index] = BuilderPendingPayment.decode_bytes(
+            b"\x00" * BuilderPendingPayment.get_byte_length()
+        )
+        return state.model_copy(
+            update={"builder_pending_payments": BuilderPendingPayments(data=payments)}
+        )
+
+    def apply_parent_execution_payload(
+        self, state: BeaconState, requests: ExecutionRequests
+    ) -> BeaconState:
+        """Process the parent payload's requests, settle its payment, and mark it available."""
+        parent_bid = state.latest_execution_payload_bid
+        parent_slot = parent_bid.slot
+        parent_epoch = self.compute_epoch_at_slot(parent_slot)
+
+        # The parent's execution requests are processed at the child's slot.
+        for deposit_request in requests.deposits:
+            state = self.process_deposit_request(state, deposit_request)
+        for withdrawal_request in requests.withdrawals:
+            state = self.process_withdrawal_request(state, withdrawal_request)
+        for consolidation_request in requests.consolidations:
+            state = self.process_consolidation_request(state, consolidation_request)
+
+        # Settle the parent's builder payment from its slot's window entry while it is
+        # still in the two-epoch window, else queue the withdrawal directly.
+        if parent_epoch == self.get_current_epoch(state):
+            state = self.settle_builder_payment(
+                state, _SLOTS_PER_EPOCH + int(parent_slot) % _SLOTS_PER_EPOCH
+            )
+        elif parent_epoch == self.get_previous_epoch(state):
+            state = self.settle_builder_payment(state, int(parent_slot) % _SLOTS_PER_EPOCH)
+        elif int(parent_bid.value) > 0:
+            withdrawals = [
+                *list(state.builder_pending_withdrawals),
+                BuilderPendingWithdrawal(
+                    fee_recipient=parent_bid.fee_recipient,
+                    amount=parent_bid.value,
+                    builder_index=parent_bid.builder_index,
+                ),
+            ]
+            state = state.model_copy(
+                update={"builder_pending_withdrawals": BuilderPendingWithdrawals(data=withdrawals)}
+            )
+
+        availability = list(state.execution_payload_availability.data)
+        availability[int(parent_slot) % _SLOTS_PER_HISTORICAL_ROOT] = Boolean(True)
+        return state.model_copy(
+            update={
+                "execution_payload_availability": ExecutionPayloadAvailability(data=availability),
+                "latest_block_hash": parent_bid.block_hash,
+            }
+        )

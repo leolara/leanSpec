@@ -22,6 +22,8 @@ from lean_spec.spec.forks.gloas.containers.beacon_chain import (
     BeaconState,
     BuilderPendingPayment,
     ConsolidationRequest,
+    DepositRequest,
+    ExecutionRequests,
     IndexedAttestation,
     IndexedPayloadAttestation,
     PayloadAttestation,
@@ -559,6 +561,18 @@ class GloasSpecBase(GloasProtocol):
         ...
 
     @abstractmethod
+    def settle_builder_payment(self, state: BeaconState, payment_index: int) -> BeaconState:
+        """Convert a slot's pending builder payment into a queued withdrawal and clear it."""
+        ...
+
+    @abstractmethod
+    def apply_parent_execution_payload(
+        self, state: BeaconState, requests: ExecutionRequests
+    ) -> BeaconState:
+        """Process the parent payload's requests, settle its payment, and mark it available."""
+        ...
+
+    @abstractmethod
     def _zero_builder_payment(self) -> BuilderPendingPayment:
         """Return an all-zero builder pending payment, the empty-slot placeholder."""
         ...
@@ -601,6 +615,13 @@ class GloasSpecBase(GloasProtocol):
         self, state: BeaconState, consolidation_request: ConsolidationRequest
     ) -> BeaconState:
         """Switch a validator to compounding, or queue a source-to-target consolidation."""
+        ...
+
+    @abstractmethod
+    def process_deposit_request(
+        self, state: BeaconState, deposit_request: DepositRequest
+    ) -> BeaconState:
+        """Apply an execution-layer deposit request to a builder or the deposit queue."""
         ...
 
     @abstractmethod

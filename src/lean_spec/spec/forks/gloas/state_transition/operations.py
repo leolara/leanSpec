@@ -39,7 +39,10 @@ from lean_spec.spec.forks.gloas.containers.beacon_chain import (
     BuilderPendingPayments,
     BuilderPendingWithdrawal,
     ConsolidationRequest,
+    Consolidations,
     DepositRequest,
+    Deposits,
+    ExecutionRequests,
     PayloadAttestation,
     PendingConsolidation,
     PendingConsolidations,
@@ -52,6 +55,7 @@ from lean_spec.spec.forks.gloas.containers.beacon_chain import (
     SignedVoluntaryExit,
     Validators,
     WithdrawalRequest,
+    Withdrawals,
 )
 from lean_spec.spec.forks.gloas.containers.primitives import Epoch, Gwei, Root, ValidatorIndex
 from lean_spec.spec.forks.gloas.preset import (
@@ -651,3 +655,32 @@ class OperationMixin(GloasSpecBase):
             state, expected.processed_builders_sweep_count
         )
         return self.update_next_withdrawal_validator_index(state, expected.withdrawals)
+
+    def process_parent_execution_payload(
+        self, state: BeaconState, block: BeaconBlock
+    ) -> BeaconState:
+        """
+        Process the parent block's execution payload before the current block's bid.
+
+        When the parent block was empty its requests must be empty too, and there is
+        nothing to apply. When the parent was full, the carried requests must match the
+        parent bid's commitment, and the parent payload is applied.
+
+        Raises:
+            AssertionError: If the requests are unexpectedly present or do not match the commitment.
+        """
+        bid = block.body.signed_execution_payload_bid.message
+        parent_bid = state.latest_execution_payload_bid
+        requests = block.body.parent_execution_requests
+
+        if bid.parent_block_hash != parent_bid.block_hash:
+            empty_requests = ExecutionRequests(
+                deposits=Deposits(data=[]),
+                withdrawals=Withdrawals(data=[]),
+                consolidations=Consolidations(data=[]),
+            )
+            assert requests == empty_requests
+            return state
+
+        assert hash_tree_root(requests) == parent_bid.execution_requests_root
+        return self.apply_parent_execution_payload(state, requests)
