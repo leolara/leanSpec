@@ -79,6 +79,21 @@ The exact bytes are arbitrary, but pinned to the value the upstream consensus
 specs use, so cross-checks against that reference line up.
 """
 
+# Pairings and subgroup checks dominate the cost of replaying vectors, and the
+# same inputs recur constantly: an attestation is verified inside the state
+# transition and again when fork choice re-imports it, and the same validator
+# keys are validated on every call. These memo tables key results on the raw
+# bytes of the inputs, which is sound because the operations are pure.
+#
+# Only the active backend populates them. The disabled path returns at once and
+# never reads them, so a case that toggles verification off can never observe a
+# hit cached by a verifying case.
+_verify_cache: dict[tuple[bytes, bytes, bytes], bool] = {}
+_fast_aggregate_verify_cache: dict[tuple[tuple[bytes, ...], bytes, bytes], bool] = {}
+_aggregate_verify_cache: dict[tuple[tuple[bytes, ...], tuple[bytes, ...], bytes], bool] = {}
+_key_validate_cache: dict[bytes, bool] = {}
+_aggregate_pubkeys_cache: dict[tuple[bytes, ...], BLSPubkey] = {}
+
 
 def Sign(secret_key: int, message: bytes) -> BLSSignature:  # noqa: N802
     """Produce a signature over a message with a secret-key scalar."""
@@ -97,10 +112,15 @@ def Verify(public_key: BLSPubkey, message: bytes, signature: BLSSignature) -> bo
     """
     if not bls_active:
         return True
+    cache_key = (bytes(public_key), bytes(message), bytes(signature))
+    if cache_key in _verify_cache:
+        return _verify_cache[cache_key]
     try:
-        return milagro.Verify(bytes(public_key), bytes(message), bytes(signature))
+        result = milagro.Verify(*cache_key)
     except Exception:
-        return False
+        result = False
+    _verify_cache[cache_key] = result
+    return result
 
 
 def Aggregate(signatures: Sequence[BLSSignature]) -> BLSSignature:  # noqa: N802
@@ -120,14 +140,19 @@ def FastAggregateVerify(  # noqa: N802
     """
     if not bls_active:
         return True
+    cache_key = (
+        tuple(bytes(public_key) for public_key in public_keys),
+        bytes(message),
+        bytes(signature),
+    )
+    if cache_key in _fast_aggregate_verify_cache:
+        return _fast_aggregate_verify_cache[cache_key]
     try:
-        return milagro.FastAggregateVerify(
-            [bytes(public_key) for public_key in public_keys],
-            bytes(message),
-            bytes(signature),
-        )
+        result = milagro.FastAggregateVerify(list(cache_key[0]), cache_key[1], cache_key[2])
     except Exception:
-        return False
+        result = False
+    _fast_aggregate_verify_cache[cache_key] = result
+    return result
 
 
 G2_POINT_AT_INFINITY = BLSSignature(b"\xc0" + b"\x00" * 95)
@@ -159,10 +184,15 @@ def eth_aggregate_pubkeys(public_keys: Sequence[BLSPubkey]) -> BLSPubkey:  # noq
     assert len(public_keys) > 0
     if bls_active:
         assert all(KeyValidate(public_key) for public_key in public_keys)
-    aggregate_point = G1Point.from_compressed_bytes(bytes(public_keys[0]))
-    for public_key in public_keys[1:]:
-        aggregate_point = aggregate_point + G1Point.from_compressed_bytes(bytes(public_key))
-    return BLSPubkey(aggregate_point.to_compressed_bytes())
+    cache_key = tuple(bytes(public_key) for public_key in public_keys)
+    if cache_key in _aggregate_pubkeys_cache:
+        return _aggregate_pubkeys_cache[cache_key]
+    aggregate_point = G1Point.from_compressed_bytes(cache_key[0])
+    for public_key_bytes in cache_key[1:]:
+        aggregate_point = aggregate_point + G1Point.from_compressed_bytes(public_key_bytes)
+    aggregate = BLSPubkey(aggregate_point.to_compressed_bytes())
+    _aggregate_pubkeys_cache[cache_key] = aggregate
+    return aggregate
 
 
 def AggregateVerify(  # noqa: N802
@@ -175,14 +205,19 @@ def AggregateVerify(  # noqa: N802
     """
     if not bls_active:
         return True
+    cache_key = (
+        tuple(bytes(public_key) for public_key in public_keys),
+        tuple(bytes(message) for message in messages),
+        bytes(signature),
+    )
+    if cache_key in _aggregate_verify_cache:
+        return _aggregate_verify_cache[cache_key]
     try:
-        return milagro.AggregateVerify(
-            [bytes(public_key) for public_key in public_keys],
-            [bytes(message) for message in messages],
-            bytes(signature),
-        )
+        result = milagro.AggregateVerify(list(cache_key[0]), list(cache_key[1]), cache_key[2])
     except Exception:
-        return False
+        result = False
+    _aggregate_verify_cache[cache_key] = result
+    return result
 
 
 def KeyValidate(public_key: BLSPubkey) -> bool:  # noqa: N802
@@ -196,13 +231,17 @@ def KeyValidate(public_key: BLSPubkey) -> bool:  # noqa: N802
     """
     if not bls_active:
         return True
+    cache_key = bytes(public_key)
+    if cache_key in _key_validate_cache:
+        return _key_validate_cache[cache_key]
     try:
-        point = G1Point.from_compressed_bytes(bytes(public_key))
+        point = G1Point.from_compressed_bytes(cache_key)
     except Exception:
+        _key_validate_cache[cache_key] = False
         return False
-    if point == G1Point.identity():
-        return False
-    return point.is_in_subgroup()
+    result = point != G1Point.identity() and point.is_in_subgroup()
+    _key_validate_cache[cache_key] = result
+    return result
 
 
 def SkToPk(secret_key: int) -> BLSPubkey:  # noqa: N802
