@@ -84,7 +84,7 @@ ban-relative-imports = "all"
 [tool.ruff.lint.isort]
 combine-as-imports = true
 force-single-line = false
-known-first-party = ["lean_spec", "consensus_testing"]
+known-first-party = ["lean_spec", "consensus_testing", "pyspec_vectors_testing"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["D"]

@@ -37,6 +37,7 @@ Issues = "https://github.com/leanEthereum/lean-spec/issues"
 fill = "consensus_testing.cli.fill:fill"
 apitest = "consensus_testing.cli.apitest:apitest"
 keys = "consensus_testing.keys_cli:keys"
+pyspec-vectors = "pyspec_vectors_testing.cli:pyspec_vectors"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -50,6 +51,7 @@ include-package-data = false
 
 [tool.setuptools.package-data]
 consensus_testing = ["py.typed", "test_keys/test_scheme/*.json", "cli/pytest_ini_files/*.ini"]
+pyspec_vectors_testing = ["pytest_ini_files/*.ini"]
 
 [tool.uv.sources]
 lean-spec = { workspace = true }
