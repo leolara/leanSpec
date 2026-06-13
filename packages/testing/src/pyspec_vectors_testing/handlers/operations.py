@@ -8,10 +8,8 @@ match; a case with no post-state expects the operation to be rejected.
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 import pytest
 
@@ -28,25 +26,16 @@ from lean_spec.spec.forks.gloas.containers.beacon_chain import (
     SignedVoluntaryExit,
     WithdrawalRequest,
 )
-from lean_spec.spec.forks.gloas.state_transition.operations import (
-    process_attestation,
-    process_attester_slashing,
-    process_block_header,
-    process_bls_to_execution_change,
-    process_consolidation_request,
-    process_proposer_slashing,
-    process_voluntary_exit,
-    process_withdrawal_request,
-)
+from lean_spec.spec.forks.gloas.spec import GloasSpec
 from lean_spec.spec.ssz.ssz_base import SSZType
 from pyspec_vectors_testing.decode import bls_is_active, decompress_ssz, load_meta
 
 
 @dataclass(frozen=True)
 class OperationSpec:
-    """How one operations handler maps to a process function and its object file."""
+    """How one operations handler maps to a spec method and its object file."""
 
-    process: Callable[[BeaconState, Any], BeaconState]
+    method: str
     container: type[SSZType]
     file_stem: str
 
@@ -54,47 +43,47 @@ class OperationSpec:
 # One entry per supported operations handler; unsupported handlers are skipped.
 OPERATION_SPECS: dict[str, OperationSpec] = {
     "bls_to_execution_change": OperationSpec(
-        process=process_bls_to_execution_change,
+        method="process_bls_to_execution_change",
         container=SignedBLSToExecutionChange,
         file_stem="address_change",
     ),
     "proposer_slashing": OperationSpec(
-        process=process_proposer_slashing,
+        method="process_proposer_slashing",
         container=ProposerSlashing,
         file_stem="proposer_slashing",
     ),
     "attester_slashing": OperationSpec(
-        process=process_attester_slashing,
+        method="process_attester_slashing",
         container=AttesterSlashing,
         file_stem="attester_slashing",
     ),
     "block_header": OperationSpec(
-        process=process_block_header,
+        method="process_block_header",
         container=BeaconBlock,
         file_stem="block",
     ),
     "attestation": OperationSpec(
-        process=process_attestation,
+        method="process_attestation",
         container=Attestation,
         file_stem="attestation",
     ),
     "withdrawal_request": OperationSpec(
-        process=process_withdrawal_request,
+        method="process_withdrawal_request",
         container=WithdrawalRequest,
         file_stem="withdrawal_request",
     ),
     "voluntary_exit": OperationSpec(
-        process=process_voluntary_exit,
+        method="process_voluntary_exit",
         container=SignedVoluntaryExit,
         file_stem="voluntary_exit",
     ),
     "voluntary_exit_churn": OperationSpec(
-        process=process_voluntary_exit,
+        method="process_voluntary_exit",
         container=SignedVoluntaryExit,
         file_stem="voluntary_exit",
     ),
     "consolidation_request": OperationSpec(
-        process=process_consolidation_request,
+        method="process_consolidation_request",
         container=ConsolidationRequest,
         file_stem="consolidation_request",
     ),
@@ -110,19 +99,21 @@ def run_operations_case(case_dir: Path, handler: str) -> None:
     """
     if handler not in OPERATION_SPECS:
         pytest.skip(f"operations handler not yet supported: {handler}")
-    spec = OPERATION_SPECS[handler]
+    operation_spec = OPERATION_SPECS[handler]
+    spec = GloasSpec()
+    process = getattr(spec, operation_spec.method)
 
     bls.bls_active = bls_is_active(load_meta(case_dir))
 
     pre_state = BeaconState.decode_bytes(decompress_ssz(case_dir / "pre.ssz_snappy"))
-    operation = spec.container.decode_bytes(
-        decompress_ssz(case_dir / f"{spec.file_stem}.ssz_snappy")
+    operation = operation_spec.container.decode_bytes(
+        decompress_ssz(case_dir / f"{operation_spec.file_stem}.ssz_snappy")
     )
 
     post_path = case_dir / "post.ssz_snappy"
     if post_path.exists():
         expected_state = BeaconState.decode_bytes(decompress_ssz(post_path))
-        actual_state = spec.process(pre_state, operation)
+        actual_state = process(pre_state, operation)
         actual_root = hash_tree_root(actual_state)
         expected_root = hash_tree_root(expected_state)
         assert actual_root == expected_root, (
@@ -135,4 +126,4 @@ def run_operations_case(case_dir: Path, handler: str) -> None:
         # The upstream runner treats any raised exception as a rejection, since a
         # bad operation can fail an assert or fault on an out-of-range lookup.
         with pytest.raises(Exception):  # noqa: B017, PT011
-            spec.process(pre_state, operation)
+            process(pre_state, operation)
