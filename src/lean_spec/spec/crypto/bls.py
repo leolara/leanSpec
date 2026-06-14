@@ -159,7 +159,7 @@ G2_POINT_AT_INFINITY = BLSSignature(b"\xc0" + b"\x00" * 95)
 """Compressed encoding of the G2 identity, the signature an empty key set signs."""
 
 
-def eth_fast_aggregate_verify(  # noqa: N802
+def eth_fast_aggregate_verify(
     public_keys: Sequence[BLSPubkey], message: bytes, signature: BLSSignature
 ) -> bool:
     """
@@ -173,7 +173,7 @@ def eth_fast_aggregate_verify(  # noqa: N802
     return FastAggregateVerify(public_keys, message, signature)
 
 
-def eth_aggregate_pubkeys(public_keys: Sequence[BLSPubkey]) -> BLSPubkey:  # noqa: N802
+def eth_aggregate_pubkeys(public_keys: Sequence[BLSPubkey]) -> BLSPubkey:
     """
     Return the aggregate public key for a non-empty key set.
 
