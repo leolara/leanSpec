@@ -18,8 +18,8 @@ import pytest
 
 import lean_spec.spec.crypto.bls as bls
 from lean_spec.spec.crypto.merkleization import hash_tree_root
-from lean_spec.spec.forks.gloas.containers.beacon_chain import BeaconState
-from lean_spec.spec.forks.gloas.spec import GloasSpec
+from lean_spec.spec.forks.beacon.gloas.containers.beacon_chain import BeaconState
+from lean_spec.spec.forks.beacon.gloas.spec import GloasSpec
 from pyspec_vectors_testing.decode import bls_is_active, decompress_ssz, load_meta
 
 # A few handler suites exercise one sub-transition under a name that is not its

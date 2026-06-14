@@ -1,6 +1,6 @@
 """Small integer and byte helpers used across the Gloas state transition."""
 
-from lean_spec.spec.forks.gloas.constants import UINT64_MAX, UINT64_MAX_SQRT
+from lean_spec.spec.forks.beacon.gloas.constants import UINT64_MAX, UINT64_MAX_SQRT
 from lean_spec.spec.ssz import Bytes32, Uint64
 
 

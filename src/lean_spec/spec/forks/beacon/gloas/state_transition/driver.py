@@ -11,8 +11,8 @@ from hashlib import sha256
 
 from lean_spec.spec.crypto import bls
 from lean_spec.spec.crypto.merkleization import hash_tree_root
-from lean_spec.spec.forks.gloas.constants import DOMAIN_BEACON_PROPOSER, DOMAIN_RANDAO
-from lean_spec.spec.forks.gloas.containers.beacon_chain import (
+from lean_spec.spec.forks.beacon.gloas.constants import DOMAIN_BEACON_PROPOSER, DOMAIN_RANDAO
+from lean_spec.spec.forks.beacon.gloas.containers.beacon_chain import (
     BeaconBlock,
     BeaconBlockBody,
     BeaconState,
@@ -23,15 +23,15 @@ from lean_spec.spec.forks.gloas.containers.beacon_chain import (
     SignedBeaconBlock,
     StateRoots,
 )
-from lean_spec.spec.forks.gloas.containers.primitives import Bytes32, Root, Slot
-from lean_spec.spec.forks.gloas.helpers.math import xor
-from lean_spec.spec.forks.gloas.preset import (
+from lean_spec.spec.forks.beacon.gloas.containers.primitives import Bytes32, Root, Slot
+from lean_spec.spec.forks.beacon.gloas.helpers.math import xor
+from lean_spec.spec.forks.beacon.gloas.preset import (
     EPOCHS_PER_ETH1_VOTING_PERIOD,
     EPOCHS_PER_HISTORICAL_VECTOR,
     SLOTS_PER_EPOCH,
     SLOTS_PER_HISTORICAL_ROOT,
 )
-from lean_spec.spec.forks.gloas.spec_base import GloasSpecBase
+from lean_spec.spec.forks.beacon.gloas.spec_base import GloasSpecBase
 from lean_spec.spec.ssz import Boolean
 
 _SLOTS_PER_EPOCH = int(SLOTS_PER_EPOCH)

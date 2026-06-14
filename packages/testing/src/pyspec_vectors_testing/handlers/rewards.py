@@ -11,15 +11,15 @@ from __future__ import annotations
 from pathlib import Path
 
 from lean_spec.spec.crypto.merkleization import hash_tree_root
-from lean_spec.spec.forks.gloas.constants import (
+from lean_spec.spec.forks.beacon.gloas.constants import (
     TIMELY_HEAD_FLAG_INDEX,
     TIMELY_SOURCE_FLAG_INDEX,
     TIMELY_TARGET_FLAG_INDEX,
 )
-from lean_spec.spec.forks.gloas.containers.beacon_chain import BeaconState
-from lean_spec.spec.forks.gloas.containers.primitives import Gwei
-from lean_spec.spec.forks.gloas.preset import VALIDATOR_REGISTRY_LIMIT
-from lean_spec.spec.forks.gloas.spec import GloasSpec
+from lean_spec.spec.forks.beacon.gloas.containers.beacon_chain import BeaconState
+from lean_spec.spec.forks.beacon.gloas.containers.primitives import Gwei
+from lean_spec.spec.forks.beacon.gloas.preset import VALIDATOR_REGISTRY_LIMIT
+from lean_spec.spec.forks.beacon.gloas.spec import GloasSpec
 from lean_spec.spec.ssz import Container, SSZList
 from pyspec_vectors_testing.decode import decompress_ssz
 

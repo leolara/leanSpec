@@ -12,7 +12,7 @@ from pathlib import Path
 
 import yaml
 
-from lean_spec.spec.forks.gloas.helpers.shuffle import compute_shuffled_permutation
+from lean_spec.spec.forks.beacon.gloas.helpers.shuffle import compute_shuffled_permutation
 from lean_spec.spec.ssz import Bytes32, Uint64
 
 

@@ -8,21 +8,21 @@ network, or message purpose from being replayed on another.
 """
 
 from lean_spec.spec.crypto.merkleization import hash_tree_root
-from lean_spec.spec.forks.gloas import config
-from lean_spec.spec.forks.gloas.containers.beacon_chain import (
+from lean_spec.spec.forks.beacon.gloas import config
+from lean_spec.spec.forks.beacon.gloas.containers.beacon_chain import (
     BeaconState,
     ForkData,
     SigningData,
 )
-from lean_spec.spec.forks.gloas.containers.primitives import (
+from lean_spec.spec.forks.beacon.gloas.containers.primitives import (
     Domain,
     DomainType,
     Epoch,
     Root,
     Version,
 )
-from lean_spec.spec.forks.gloas.preset import SLOTS_PER_EPOCH
-from lean_spec.spec.forks.gloas.spec_base import GloasSpecBase
+from lean_spec.spec.forks.beacon.gloas.preset import SLOTS_PER_EPOCH
+from lean_spec.spec.forks.beacon.gloas.spec_base import GloasSpecBase
 from lean_spec.spec.ssz.ssz_base import SSZType
 
 _FORK_DATA_ROOT_DOMAIN_BYTES = 28

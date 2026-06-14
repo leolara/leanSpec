@@ -8,12 +8,12 @@ consensus vectors can exercise it in isolation.
 """
 
 from lean_spec.spec.crypto.merkleization import hash_tree_root
-from lean_spec.spec.forks.gloas.config import (
+from lean_spec.spec.forks.beacon.gloas.config import (
     EJECTION_BALANCE,
     INACTIVITY_SCORE_BIAS,
     INACTIVITY_SCORE_RECOVERY_RATE,
 )
-from lean_spec.spec.forks.gloas.constants import (
+from lean_spec.spec.forks.beacon.gloas.constants import (
     FAR_FUTURE_EPOCH,
     GENESIS_EPOCH,
     JUSTIFICATION_BITS_LENGTH,
@@ -22,7 +22,7 @@ from lean_spec.spec.forks.gloas.constants import (
     TIMELY_TARGET_FLAG_INDEX,
     WEIGHT_DENOMINATOR,
 )
-from lean_spec.spec.forks.gloas.containers.beacon_chain import (
+from lean_spec.spec.forks.beacon.gloas.containers.beacon_chain import (
     Balances,
     BeaconState,
     BuilderPendingPayment,
@@ -44,7 +44,7 @@ from lean_spec.spec.forks.gloas.containers.beacon_chain import (
     Slashings,
     Validators,
 )
-from lean_spec.spec.forks.gloas.containers.primitives import (
+from lean_spec.spec.forks.beacon.gloas.containers.primitives import (
     Epoch,
     Gwei,
     ParticipationFlags,
@@ -52,7 +52,7 @@ from lean_spec.spec.forks.gloas.containers.primitives import (
     Slot,
     ValidatorIndex,
 )
-from lean_spec.spec.forks.gloas.preset import (
+from lean_spec.spec.forks.beacon.gloas.preset import (
     EFFECTIVE_BALANCE_INCREMENT,
     EPOCHS_PER_ETH1_VOTING_PERIOD,
     EPOCHS_PER_HISTORICAL_VECTOR,
@@ -68,7 +68,7 @@ from lean_spec.spec.forks.gloas.preset import (
     SLOTS_PER_EPOCH,
     SLOTS_PER_HISTORICAL_ROOT,
 )
-from lean_spec.spec.forks.gloas.spec_base import GloasSpecBase
+from lean_spec.spec.forks.beacon.gloas.spec_base import GloasSpecBase
 from lean_spec.spec.ssz import Boolean, Uint64
 
 _EPOCHS_PER_SLASHINGS_VECTOR = int(EPOCHS_PER_SLASHINGS_VECTOR)

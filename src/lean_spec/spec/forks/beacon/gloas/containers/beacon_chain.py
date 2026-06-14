@@ -8,7 +8,7 @@ vectors. Collection limits that vary by preset read from the preset module.
 
 import os
 
-from lean_spec.spec.forks.gloas.containers.primitives import (
+from lean_spec.spec.forks.beacon.gloas.containers.primitives import (
     BLSPubkey,
     BLSSignature,
     BuilderIndex,

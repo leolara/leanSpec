@@ -14,7 +14,7 @@ from collections.abc import Sequence
 from hashlib import sha256
 
 from lean_spec.spec.crypto import bls
-from lean_spec.spec.forks.gloas.config import (
+from lean_spec.spec.forks.beacon.gloas.config import (
     BLOB_SCHEDULE,
     CHURN_LIMIT_QUOTIENT_GLOAS,
     ELECTRA_FORK_EPOCH,
@@ -23,7 +23,7 @@ from lean_spec.spec.forks.gloas.config import (
     MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA,
     BlobParameters,
 )
-from lean_spec.spec.forks.gloas.constants import (
+from lean_spec.spec.forks.beacon.gloas.constants import (
     BUILDER_PAYMENT_THRESHOLD_DENOMINATOR,
     BUILDER_PAYMENT_THRESHOLD_NUMERATOR,
     DOMAIN_BEACON_ATTESTER,
@@ -36,7 +36,7 @@ from lean_spec.spec.forks.gloas.constants import (
     TIMELY_SOURCE_FLAG_INDEX,
     TIMELY_TARGET_FLAG_INDEX,
 )
-from lean_spec.spec.forks.gloas.containers.beacon_chain import (
+from lean_spec.spec.forks.beacon.gloas.containers.beacon_chain import (
     Attestation,
     AttestationData,
     AttestingIndices,
@@ -51,7 +51,7 @@ from lean_spec.spec.forks.gloas.containers.beacon_chain import (
     SyncCommittee,
     Withdrawal,
 )
-from lean_spec.spec.forks.gloas.containers.primitives import (
+from lean_spec.spec.forks.beacon.gloas.containers.primitives import (
     BLSPubkey,
     BuilderIndex,
     CommitteeIndex,
@@ -65,14 +65,17 @@ from lean_spec.spec.forks.gloas.containers.primitives import (
     ValidatorIndex,
     WithdrawalIndex,
 )
-from lean_spec.spec.forks.gloas.containers.withdrawals import ExpectedWithdrawals
-from lean_spec.spec.forks.gloas.helpers.math import (
+from lean_spec.spec.forks.beacon.gloas.containers.withdrawals import ExpectedWithdrawals
+from lean_spec.spec.forks.beacon.gloas.helpers.math import (
     bytes_to_uint64,
     integer_squareroot,
     uint64_to_bytes,
 )
-from lean_spec.spec.forks.gloas.helpers.shuffle import compute_committee, compute_shuffled_index
-from lean_spec.spec.forks.gloas.preset import (
+from lean_spec.spec.forks.beacon.gloas.helpers.shuffle import (
+    compute_committee,
+    compute_shuffled_index,
+)
+from lean_spec.spec.forks.beacon.gloas.preset import (
     BASE_REWARD_FACTOR,
     EFFECTIVE_BALANCE_INCREMENT,
     EPOCHS_PER_HISTORICAL_VECTOR,
@@ -93,7 +96,7 @@ from lean_spec.spec.forks.gloas.preset import (
     SYNC_COMMITTEE_SIZE,
     TARGET_COMMITTEE_SIZE,
 )
-from lean_spec.spec.forks.gloas.spec_base import GloasSpecBase
+from lean_spec.spec.forks.beacon.gloas.spec_base import GloasSpecBase
 from lean_spec.spec.ssz import Bytes32, Uint64
 from lean_spec.spec.ssz.bitfields import BaseBitvector
 

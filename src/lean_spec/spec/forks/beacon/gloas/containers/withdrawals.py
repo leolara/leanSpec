@@ -13,7 +13,7 @@ serialized or stored in the state.
 
 from dataclasses import dataclass
 
-from lean_spec.spec.forks.gloas.containers.beacon_chain import Withdrawal
+from lean_spec.spec.forks.beacon.gloas.containers.beacon_chain import Withdrawal
 from lean_spec.spec.ssz import Uint64
 
 

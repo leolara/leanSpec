@@ -10,7 +10,7 @@ and mainnet test networks assign different fork versions and activation epochs.
 import os
 from dataclasses import dataclass
 
-from lean_spec.spec.forks.gloas.containers.primitives import Epoch, Gwei, Version
+from lean_spec.spec.forks.beacon.gloas.containers.primitives import Epoch, Gwei, Version
 from lean_spec.spec.ssz import Uint64
 
 _PRESET = os.environ.get("GLOAS_PRESET", "mainnet").lower()

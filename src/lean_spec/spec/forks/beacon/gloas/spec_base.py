@@ -9,12 +9,11 @@ extends a minimal protocol carrying the fork identity.
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from collections.abc import Sequence
-from typing import ClassVar
 
-from lean_spec.spec.forks.gloas.config import BlobParameters
-from lean_spec.spec.forks.gloas.containers.beacon_chain import (
+from lean_spec.spec.forks.beacon.gloas.config import BlobParameters
+from lean_spec.spec.forks.beacon.gloas.containers.beacon_chain import (
     Attestation,
     AttestationData,
     AttesterSlashing,
@@ -41,7 +40,7 @@ from lean_spec.spec.forks.gloas.containers.beacon_chain import (
     Withdrawal,
     WithdrawalRequest,
 )
-from lean_spec.spec.forks.gloas.containers.primitives import (
+from lean_spec.spec.forks.beacon.gloas.containers.primitives import (
     BLSPubkey,
     BLSSignature,
     BuilderIndex,
@@ -56,23 +55,14 @@ from lean_spec.spec.forks.gloas.containers.primitives import (
     ValidatorIndex,
     Version,
 )
-from lean_spec.spec.forks.gloas.containers.withdrawals import ExpectedWithdrawals
+from lean_spec.spec.forks.beacon.gloas.containers.withdrawals import ExpectedWithdrawals
+from lean_spec.spec.forks.beacon.protocol import BeaconForkProtocol
 from lean_spec.spec.ssz import Bytes32, Uint64
 from lean_spec.spec.ssz.bitfields import BaseBitvector
 from lean_spec.spec.ssz.ssz_base import SSZType
 
 
-class GloasProtocol(ABC):
-    """Identity facade for the standalone Gloas reference fork."""
-
-    NAME: ClassVar[str]
-    """Fork name."""
-
-    PRESET: ClassVar[str]
-    """Active consensus preset, mainnet or minimal."""
-
-
-class GloasSpecBase(GloasProtocol):
+class GloasSpecBase(BeaconForkProtocol):
     """
     Typed base every Gloas behavior mixin inherits.
 

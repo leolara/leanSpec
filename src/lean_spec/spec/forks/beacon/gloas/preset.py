@@ -9,7 +9,7 @@ worker in a parallel run shares one consistent preset.
 
 import os
 
-from lean_spec.spec.forks.gloas.containers.primitives import Gwei
+from lean_spec.spec.forks.beacon.gloas.containers.primitives import Gwei
 from lean_spec.spec.ssz import Uint64
 
 _PRESET = os.environ.get("GLOAS_PRESET", "mainnet").lower()

@@ -13,14 +13,14 @@ fork-choice vectors ship payloads the execution layer is assumed to accept.
 
 from lean_spec.spec.crypto import bls
 from lean_spec.spec.crypto.merkleization import hash_tree_root
-from lean_spec.spec.forks.gloas.config import (
+from lean_spec.spec.forks.beacon.gloas.config import (
     ATTESTATION_DUE_BPS_GLOAS,
     PAYLOAD_ATTESTATION_DUE_BPS,
     PROPOSER_SCORE_BOOST,
     REORG_HEAD_WEIGHT_THRESHOLD,
     SLOT_DURATION_MS,
 )
-from lean_spec.spec.forks.gloas.constants import (
+from lean_spec.spec.forks.beacon.gloas.constants import (
     ATTESTATION_TIMELINESS_INDEX,
     BASIS_POINTS,
     BUILDER_INDEX_SELF_BUILD,
@@ -29,7 +29,7 @@ from lean_spec.spec.forks.gloas.constants import (
     GENESIS_SLOT,
     PTC_TIMELINESS_INDEX,
 )
-from lean_spec.spec.forks.gloas.containers.beacon_chain import (
+from lean_spec.spec.forks.beacon.gloas.containers.beacon_chain import (
     Attestation,
     AttesterSlashing,
     BeaconBlock,
@@ -42,7 +42,7 @@ from lean_spec.spec.forks.gloas.containers.beacon_chain import (
     SignedBeaconBlock,
     SignedExecutionPayloadEnvelope,
 )
-from lean_spec.spec.forks.gloas.containers.fork_choice import (
+from lean_spec.spec.forks.beacon.gloas.containers.fork_choice import (
     PAYLOAD_STATUS_EMPTY,
     PAYLOAD_STATUS_FULL,
     PAYLOAD_STATUS_PENDING,
@@ -51,7 +51,7 @@ from lean_spec.spec.forks.gloas.containers.fork_choice import (
     PayloadStatus,
     Store,
 )
-from lean_spec.spec.forks.gloas.containers.primitives import (
+from lean_spec.spec.forks.beacon.gloas.containers.primitives import (
     BLSSignature,
     CommitteeIndex,
     Epoch,
@@ -60,14 +60,14 @@ from lean_spec.spec.forks.gloas.containers.primitives import (
     Slot,
     ValidatorIndex,
 )
-from lean_spec.spec.forks.gloas.preset import (
+from lean_spec.spec.forks.beacon.gloas.preset import (
     DATA_AVAILABILITY_TIMELY_THRESHOLD,
     MIN_SEED_LOOKAHEAD,
     PAYLOAD_TIMELY_THRESHOLD,
     PTC_SIZE,
     SLOTS_PER_EPOCH,
 )
-from lean_spec.spec.forks.gloas.spec_base import GloasSpecBase
+from lean_spec.spec.forks.beacon.gloas.spec_base import GloasSpecBase
 from lean_spec.spec.ssz import Boolean, Uint8, Uint64
 
 _SLOTS_PER_EPOCH = int(SLOTS_PER_EPOCH)

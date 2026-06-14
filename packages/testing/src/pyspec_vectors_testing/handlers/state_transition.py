@@ -20,9 +20,9 @@ import yaml
 
 import lean_spec.spec.crypto.bls as bls
 from lean_spec.spec.crypto.merkleization import hash_tree_root
-from lean_spec.spec.forks.gloas.containers.beacon_chain import BeaconState, SignedBeaconBlock
-from lean_spec.spec.forks.gloas.containers.primitives import Slot
-from lean_spec.spec.forks.gloas.spec import GloasSpec
+from lean_spec.spec.forks.beacon.gloas.containers.beacon_chain import BeaconState, SignedBeaconBlock
+from lean_spec.spec.forks.beacon.gloas.containers.primitives import Slot
+from lean_spec.spec.forks.beacon.gloas.spec import GloasSpec
 from pyspec_vectors_testing.decode import bls_is_active, decompress_ssz, load_meta
 
 

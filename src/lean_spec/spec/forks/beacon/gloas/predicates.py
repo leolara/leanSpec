@@ -7,7 +7,7 @@ validity. They carry no state mutation.
 """
 
 from lean_spec.spec.crypto import bls
-from lean_spec.spec.forks.gloas.constants import (
+from lean_spec.spec.forks.beacon.gloas.constants import (
     BUILDER_INDEX_FLAG,
     BUILDER_WITHDRAWAL_PREFIX,
     COMPOUNDING_WITHDRAWAL_PREFIX,
@@ -18,7 +18,7 @@ from lean_spec.spec.forks.gloas.constants import (
     ETH1_ADDRESS_WITHDRAWAL_PREFIX,
     FAR_FUTURE_EPOCH,
 )
-from lean_spec.spec.forks.gloas.containers.beacon_chain import (
+from lean_spec.spec.forks.beacon.gloas.containers.beacon_chain import (
     AttestationData,
     BeaconState,
     DepositMessage,
@@ -28,7 +28,7 @@ from lean_spec.spec.forks.gloas.containers.beacon_chain import (
     SignedExecutionPayloadBid,
     Validator,
 )
-from lean_spec.spec.forks.gloas.containers.primitives import (
+from lean_spec.spec.forks.beacon.gloas.containers.primitives import (
     BLSPubkey,
     BLSSignature,
     BuilderIndex,
@@ -36,12 +36,12 @@ from lean_spec.spec.forks.gloas.containers.primitives import (
     Gwei,
     ValidatorIndex,
 )
-from lean_spec.spec.forks.gloas.preset import (
+from lean_spec.spec.forks.beacon.gloas.preset import (
     MAX_EFFECTIVE_BALANCE_ELECTRA,
     MIN_ACTIVATION_BALANCE,
     MIN_DEPOSIT_AMOUNT,
 )
-from lean_spec.spec.forks.gloas.spec_base import GloasSpecBase
+from lean_spec.spec.forks.beacon.gloas.spec_base import GloasSpecBase
 from lean_spec.spec.ssz import Bytes32
 
 

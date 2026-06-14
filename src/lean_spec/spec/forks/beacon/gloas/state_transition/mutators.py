@@ -8,14 +8,14 @@ exit-churn helpers also return the queue epoch they computed.
 
 from collections.abc import Sequence
 
-from lean_spec.spec.forks.gloas.config import (
+from lean_spec.spec.forks.beacon.gloas.config import (
     CHURN_LIMIT_QUOTIENT_GLOAS,
     CONSOLIDATION_CHURN_LIMIT_QUOTIENT,
     MIN_BUILDER_WITHDRAWABILITY_DELAY,
     MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA,
     MIN_VALIDATOR_WITHDRAWABILITY_DELAY,
 )
-from lean_spec.spec.forks.gloas.constants import (
+from lean_spec.spec.forks.beacon.gloas.constants import (
     COMPOUNDING_WITHDRAWAL_PREFIX,
     FAR_FUTURE_EPOCH,
     G2_POINT_AT_INFINITY,
@@ -23,7 +23,7 @@ from lean_spec.spec.forks.gloas.constants import (
     PROPOSER_WEIGHT,
     WEIGHT_DENOMINATOR,
 )
-from lean_spec.spec.forks.gloas.containers.beacon_chain import (
+from lean_spec.spec.forks.beacon.gloas.containers.beacon_chain import (
     Balances,
     BeaconState,
     Builder,
@@ -46,7 +46,7 @@ from lean_spec.spec.forks.gloas.containers.beacon_chain import (
     Validators,
     Withdrawal,
 )
-from lean_spec.spec.forks.gloas.containers.primitives import (
+from lean_spec.spec.forks.beacon.gloas.containers.primitives import (
     BLSPubkey,
     BLSSignature,
     BuilderIndex,
@@ -58,7 +58,7 @@ from lean_spec.spec.forks.gloas.containers.primitives import (
     ValidatorIndex,
     WithdrawalIndex,
 )
-from lean_spec.spec.forks.gloas.preset import (
+from lean_spec.spec.forks.beacon.gloas.preset import (
     EFFECTIVE_BALANCE_INCREMENT,
     EPOCHS_PER_SLASHINGS_VECTOR,
     MAX_VALIDATORS_PER_WITHDRAWALS_SWEEP,
@@ -69,7 +69,7 @@ from lean_spec.spec.forks.gloas.preset import (
     SLOTS_PER_HISTORICAL_ROOT,
     WHISTLEBLOWER_REWARD_QUOTIENT_ELECTRA,
 )
-from lean_spec.spec.forks.gloas.spec_base import GloasSpecBase
+from lean_spec.spec.forks.beacon.gloas.spec_base import GloasSpecBase
 from lean_spec.spec.ssz import Boolean, Bytes32, Uint8, Uint64
 
 _SLOTS_PER_EPOCH = int(SLOTS_PER_EPOCH)

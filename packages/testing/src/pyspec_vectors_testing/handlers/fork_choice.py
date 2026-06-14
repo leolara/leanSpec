@@ -16,7 +16,7 @@ import pytest
 import yaml
 
 import lean_spec.spec.crypto.bls as bls
-from lean_spec.spec.forks.gloas.containers.beacon_chain import (
+from lean_spec.spec.forks.beacon.gloas.containers.beacon_chain import (
     Attestation,
     AttesterSlashing,
     BeaconBlock,
@@ -25,9 +25,9 @@ from lean_spec.spec.forks.gloas.containers.beacon_chain import (
     SignedBeaconBlock,
     SignedExecutionPayloadEnvelope,
 )
-from lean_spec.spec.forks.gloas.containers.fork_choice import Store
-from lean_spec.spec.forks.gloas.containers.primitives import Root
-from lean_spec.spec.forks.gloas.spec import GloasSpec
+from lean_spec.spec.forks.beacon.gloas.containers.fork_choice import Store
+from lean_spec.spec.forks.beacon.gloas.containers.primitives import Root
+from lean_spec.spec.forks.beacon.gloas.spec import GloasSpec
 from lean_spec.spec.ssz import Boolean, Uint64
 from pyspec_vectors_testing.decode import bls_is_active, decompress_ssz, load_meta
 

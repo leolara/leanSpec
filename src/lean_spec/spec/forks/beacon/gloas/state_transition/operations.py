@@ -10,12 +10,12 @@ from hashlib import sha256
 
 from lean_spec.spec.crypto import bls
 from lean_spec.spec.crypto.merkleization import hash_tree_root
-from lean_spec.spec.forks.gloas.config import (
+from lean_spec.spec.forks.beacon.gloas.config import (
     CAPELLA_FORK_VERSION,
     MIN_VALIDATOR_WITHDRAWABILITY_DELAY,
     SHARD_COMMITTEE_PERIOD,
 )
-from lean_spec.spec.forks.gloas.constants import (
+from lean_spec.spec.forks.beacon.gloas.constants import (
     BLS_WITHDRAWAL_PREFIX,
     BUILDER_INDEX_SELF_BUILD,
     DOMAIN_BEACON_PROPOSER,
@@ -31,7 +31,7 @@ from lean_spec.spec.forks.gloas.constants import (
     SYNC_REWARD_WEIGHT,
     WEIGHT_DENOMINATOR,
 )
-from lean_spec.spec.forks.gloas.containers.beacon_chain import (
+from lean_spec.spec.forks.beacon.gloas.containers.beacon_chain import (
     Attestation,
     AttesterSlashing,
     BeaconBlock,
@@ -60,14 +60,14 @@ from lean_spec.spec.forks.gloas.containers.beacon_chain import (
     WithdrawalRequest,
     Withdrawals,
 )
-from lean_spec.spec.forks.gloas.containers.primitives import (
+from lean_spec.spec.forks.beacon.gloas.containers.primitives import (
     Epoch,
     Gwei,
     Root,
     Slot,
     ValidatorIndex,
 )
-from lean_spec.spec.forks.gloas.preset import (
+from lean_spec.spec.forks.beacon.gloas.preset import (
     EFFECTIVE_BALANCE_INCREMENT,
     MIN_ACTIVATION_BALANCE,
     MIN_ATTESTATION_INCLUSION_DELAY,
@@ -76,7 +76,7 @@ from lean_spec.spec.forks.gloas.preset import (
     SLOTS_PER_EPOCH,
     SYNC_COMMITTEE_SIZE,
 )
-from lean_spec.spec.forks.gloas.spec_base import GloasSpecBase
+from lean_spec.spec.forks.beacon.gloas.spec_base import GloasSpecBase
 from lean_spec.spec.ssz import Bytes32, Uint64
 
 _SLOTS_PER_EPOCH = int(SLOTS_PER_EPOCH)

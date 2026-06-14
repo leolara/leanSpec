@@ -12,13 +12,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from lean_spec.spec.forks.gloas.containers.beacon_chain import (
+from lean_spec.spec.forks.beacon.gloas.containers.beacon_chain import (
     BeaconBlock,
     BeaconState,
     Checkpoint,
     ExecutionPayloadEnvelope,
 )
-from lean_spec.spec.forks.gloas.containers.primitives import Root, Slot, ValidatorIndex
+from lean_spec.spec.forks.beacon.gloas.containers.primitives import Root, Slot, ValidatorIndex
 from lean_spec.spec.ssz import Boolean, Uint8, Uint64
 
 

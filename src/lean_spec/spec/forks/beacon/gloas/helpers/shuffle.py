@@ -21,7 +21,7 @@ results are wrapped only at the boundary.
 from collections.abc import Sequence
 from hashlib import sha256
 
-from lean_spec.spec.forks.gloas.preset import SHUFFLE_ROUND_COUNT
+from lean_spec.spec.forks.beacon.gloas.preset import SHUFFLE_ROUND_COUNT
 from lean_spec.spec.ssz import Bytes32, Uint64
 
 # A single hash output covers swap bits for this many positions at once.

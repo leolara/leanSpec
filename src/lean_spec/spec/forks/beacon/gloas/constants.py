@@ -6,7 +6,7 @@ preset: signature domain tags, reward weights, withdrawal prefixes, and the
 other constants shared across every network.
 """
 
-from lean_spec.spec.forks.gloas.containers.primitives import (
+from lean_spec.spec.forks.beacon.gloas.containers.primitives import (
     BLSSignature,
     DomainType,
     Epoch,
