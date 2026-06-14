@@ -227,10 +227,6 @@ class AccessorMixin(GloasSpecBase):
         active_indices = self.get_active_validator_indices(state, self.get_current_epoch(state))
         return self.get_total_balance(state, set(active_indices))
 
-    def get_index_for_new_validator(self, state: BeaconState) -> ValidatorIndex:
-        """Return the registry index a newly deposited validator will occupy."""
-        return ValidatorIndex(len(state.validators))
-
     def get_activation_churn_limit(self, state: BeaconState) -> Gwei:
         """Return the per-epoch activation churn, floored, rounded, and capped."""
         churn = max(

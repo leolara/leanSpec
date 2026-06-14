@@ -175,3 +175,38 @@ is_admin
 # Attribute assignment in slotted-class tests that proves new attributes are
 # rejected; the assignment is the action under test, never read back.
 _.extra_field
+
+# Gloas SSZ container fields, part of the serialized wire format.
+# The SSZ codec reads them by field order during encoding and merkleization,
+# but the ported state-transition logic never reads them back by attribute.
+deposit_root
+deposit_count
+execution_payment
+graffiti
+block_summary_root
+state_summary_root
+historical_roots
+eth1_deposit_index
+deposit_requests_start_index
+receipts_root
+logs_bloom
+block_number
+gas_used
+extra_data
+base_fee_per_gas
+transactions
+blob_gas_used
+excess_blob_gas
+block_access_list
+
+# Gloas vector-test harness integration with pytest.
+# pytest discovers the file hook and drives the collector and item methods
+# through its collection protocol, so the call sites live in pytest itself.
+pytest_collect_file
+_.collect
+_.runtest
+_.reportinfo
+
+# Gloas vector-test runner, wired as a console-script entry point.
+# The package entry-point metadata invokes it; there is no in-tree call site.
+pyspec_vectors

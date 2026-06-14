@@ -6,7 +6,6 @@ over a shared typed base. It is standalone: it does not join the lean fork
 registry and is driven only by the consensus spec-test vector harness.
 """
 
-import os
 from typing import ClassVar
 
 from lean_spec.spec.forks.beacon.gloas.accessors import AccessorMixin
@@ -15,7 +14,6 @@ from lean_spec.spec.forks.beacon.gloas.containers.beacon_chain import (
     BeaconBlockBody,
     BeaconBlockHeader,
     BeaconState,
-    SignedBeaconBlock,
 )
 from lean_spec.spec.forks.beacon.gloas.containers.fork_choice import Store
 from lean_spec.spec.forks.beacon.gloas.fork_choice import ForkChoiceMixin
@@ -45,11 +43,9 @@ class GloasSpec(
 
     NAME: ClassVar[str] = "gloas"
     VERSION: ClassVar[int] = 0
-    PRESET: ClassVar[str] = os.environ.get("GLOAS_PRESET", "mainnet").lower()
 
     state_class: type[BeaconState] = BeaconState
     block_class: type[BeaconBlock] = BeaconBlock
     block_body_class: type[BeaconBlockBody] = BeaconBlockBody
     block_header_class: type[BeaconBlockHeader] = BeaconBlockHeader
-    signed_block_class: type[SignedBeaconBlock] = SignedBeaconBlock
     store_class: type[Store] = Store

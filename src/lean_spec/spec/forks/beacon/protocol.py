@@ -22,9 +22,6 @@ class BeaconForkProtocol(ABC):
     VERSION: ClassVar[int]
     """Strictly monotonic version, ordering the beacon forks in the registry."""
 
-    PRESET: ClassVar[str]
-    """Active consensus preset, mainnet or minimal."""
-
     state_class: type[SSZType]
     """Concrete beacon-state container class owned by this fork."""
 
@@ -36,9 +33,6 @@ class BeaconForkProtocol(ABC):
 
     block_header_class: type[SSZType]
     """Concrete beacon-block-header container class owned by this fork."""
-
-    signed_block_class: type[SSZType]
-    """Concrete signed-beacon-block container class owned by this fork."""
 
     store_class: type
     """Concrete fork-choice store class owned by this fork."""

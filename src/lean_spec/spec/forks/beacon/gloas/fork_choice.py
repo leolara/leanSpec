@@ -714,10 +714,6 @@ class ForkChoiceMixin(GloasSpecBase):
         )
         return bls.Verify(public_key, signing_root, signed_envelope.signature)
 
-    def is_head_late(self, store: Store, head_root: Root) -> bool:
-        """Check the head block arrived after the attestation deadline."""
-        return not bool(store.block_timeliness[head_root][int(ATTESTATION_TIMELINESS_INDEX)])
-
     def is_head_weak(self, store: Store, head_root: Root) -> bool:
         """Check a head's weight, counting equivocations, is below the re-org threshold."""
         justified_state = store.checkpoint_states[store.justified_checkpoint]

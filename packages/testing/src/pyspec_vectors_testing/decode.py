@@ -14,8 +14,6 @@ from typing import Any
 import cramjam
 import yaml
 
-from lean_spec.spec.ssz.ssz_base import SSZType
-
 # The compiled cramjam binding ships no type information, so its call surface is
 # bound through a dynamically typed alias for the type checker.
 _cramjam: Any = cramjam
@@ -24,11 +22,6 @@ _cramjam: Any = cramjam
 def decompress_ssz(path: Path) -> bytes:
     """Decompress a snappy-block-framed SSZ file to its raw bytes."""
     return bytes(_cramjam.snappy.decompress_raw(path.read_bytes()))
-
-
-def load_object(path: Path, container: type[SSZType]) -> Any:
-    """Deserialize one compressed SSZ object into the given container type."""
-    return container.decode_bytes(decompress_ssz(path))
 
 
 def load_meta(case_dir: Path) -> dict[str, Any]:

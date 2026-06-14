@@ -358,11 +358,6 @@ class GloasSpecBase(BeaconForkProtocol):
         ...
 
     @abstractmethod
-    def get_index_for_new_validator(self, state: BeaconState) -> ValidatorIndex:
-        """Return the registry index a newly deposited validator will occupy."""
-        ...
-
-    @abstractmethod
     def get_activation_churn_limit(self, state: BeaconState) -> Gwei:
         """Return the per-epoch activation churn, floored, rounded, and capped."""
         ...

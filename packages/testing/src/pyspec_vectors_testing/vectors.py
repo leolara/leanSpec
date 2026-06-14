@@ -20,9 +20,6 @@ The flattened pyspec module and the vectors must come from one commit, so the
 release tag is recorded alongside the spec it was translated from.
 """
 
-PINNED_COMMIT = "4f1df00ff567ea1855fb7f37ec23bd324a96703b"
-"""Exact consensus-specs commit the pinned release was built from."""
-
 _DOWNLOAD_URL = (
     "https://github.com/ethereum/consensus-specs/releases/download/"
     f"{PINNED_RELEASE}/{{preset}}.tar.gz"

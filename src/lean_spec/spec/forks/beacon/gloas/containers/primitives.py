@@ -9,7 +9,6 @@ class only documents intent.
 
 from lean_spec.spec.ssz import (
     Bytes4,
-    Bytes8,
     Bytes20,
     Bytes32,
     Bytes48,
@@ -47,10 +46,6 @@ class Gwei(Uint64):
     """An amount of Ether denominated in gwei."""
 
 
-class Ether(Uint64):
-    """An amount denominated in whole Ether."""
-
-
 class ParticipationFlags(Uint8):
     """Bit set of participation flags recorded for one validator in one epoch."""
 
@@ -59,20 +54,12 @@ class PayloadStatus(Uint8):
     """Status of the execution payload slot in the beacon state bookkeeping."""
 
 
-class PayloadValidationStatus(Uint8):
-    """Outcome of execution-payload validation as tracked by fork choice."""
-
-
 class Root(Bytes32):
     """A 32-byte Merkle root or block/state root."""
 
 
 class Hash32(Bytes32):
     """A 32-byte opaque hash, such as an execution block hash."""
-
-
-class VersionedHash(Bytes32):
-    """A 32-byte versioned hash committing to a blob KZG commitment."""
 
 
 class Domain(Bytes32):
@@ -95,10 +82,6 @@ class ExecutionAddress(Bytes20):
     """A 20-byte execution-layer account address."""
 
 
-class PayloadId(Bytes8):
-    """An 8-byte identifier for an execution payload build job."""
-
-
 class BLSPubkey(Bytes48):
     """A 48-byte compressed BLS12-381 public key in G1."""
 
@@ -109,7 +92,3 @@ class BLSSignature(Bytes96):
 
 class KZGCommitment(Bytes48):
     """A 48-byte KZG commitment to a blob polynomial."""
-
-
-class KZGProof(Bytes48):
-    """A 48-byte KZG opening proof."""
