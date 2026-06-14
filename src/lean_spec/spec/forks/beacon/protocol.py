@@ -19,6 +19,9 @@ class BeaconForkProtocol(ABC):
     NAME: ClassVar[str]
     """Fork name, unique across the beacon fork family."""
 
+    VERSION: ClassVar[int]
+    """Strictly monotonic version, ordering the beacon forks in the registry."""
+
     PRESET: ClassVar[str]
     """Active consensus preset, mainnet or minimal."""
 

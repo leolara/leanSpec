@@ -44,6 +44,7 @@ class GloasSpec(
     """The standalone mainnet Gloas reference spec."""
 
     NAME: ClassVar[str] = "gloas"
+    VERSION: ClassVar[int] = 0
     PRESET: ClassVar[str] = os.environ.get("GLOAS_PRESET", "mainnet").lower()
 
     state_class: type[BeaconState] = BeaconState
