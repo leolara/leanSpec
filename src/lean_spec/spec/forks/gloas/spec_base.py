@@ -56,7 +56,7 @@ from lean_spec.spec.forks.gloas.containers.primitives import (
     ValidatorIndex,
     Version,
 )
-from lean_spec.spec.forks.gloas.helpers.withdrawals import ExpectedWithdrawals
+from lean_spec.spec.forks.gloas.containers.withdrawals import ExpectedWithdrawals
 from lean_spec.spec.ssz import Bytes32, Uint64
 from lean_spec.spec.ssz.bitfields import BaseBitvector
 from lean_spec.spec.ssz.ssz_base import SSZType

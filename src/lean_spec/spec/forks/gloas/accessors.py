@@ -65,13 +65,13 @@ from lean_spec.spec.forks.gloas.containers.primitives import (
     ValidatorIndex,
     WithdrawalIndex,
 )
+from lean_spec.spec.forks.gloas.containers.withdrawals import ExpectedWithdrawals
 from lean_spec.spec.forks.gloas.helpers.math import (
     bytes_to_uint64,
     integer_squareroot,
     uint64_to_bytes,
 )
 from lean_spec.spec.forks.gloas.helpers.shuffle import compute_committee, compute_shuffled_index
-from lean_spec.spec.forks.gloas.helpers.withdrawals import ExpectedWithdrawals
 from lean_spec.spec.forks.gloas.preset import (
     BASE_REWARD_FACTOR,
     EFFECTIVE_BALANCE_INCREMENT,

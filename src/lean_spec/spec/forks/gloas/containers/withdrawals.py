@@ -5,6 +5,10 @@ The withdrawal sweep is built in stages: queued builder withdrawals, pending
 partial withdrawals, the builder balance sweep, and the validator balance sweep.
 Each stage reports how many entries it processed so the state can advance its
 per-stage cursors after the withdrawals are applied.
+
+This is a transient computation result, not an SSZ type: it is returned by the
+withdrawal sweep and consumed at once when the withdrawals are applied, never
+serialized or stored in the state.
 """
 
 from dataclasses import dataclass
