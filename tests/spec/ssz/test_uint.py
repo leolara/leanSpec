@@ -9,11 +9,11 @@ import pytest
 from hypothesis import given, strategies as st
 from pydantic import BaseModel, ValidationError
 
-from lean_spec.spec.ssz import Uint8, Uint16, Uint32, Uint64
+from lean_spec.spec.ssz import Uint8, Uint16, Uint32, Uint64, Uint256
 from lean_spec.spec.ssz.exceptions import SSZSerializationError, SSZTypeError, SSZValueError
 from lean_spec.spec.ssz.uint import BaseUint
 
-ALL_UINT_TYPES = (Uint8, Uint16, Uint32, Uint64)
+ALL_UINT_TYPES = (Uint8, Uint16, Uint32, Uint64, Uint256)
 """A collection of all Uint types to test against."""
 
 CROSS_UINT_TYPE_PAIRS = list(permutations(ALL_UINT_TYPES, 2))
@@ -37,11 +37,16 @@ class Uint64Model(BaseModel):
     value: Uint64
 
 
+class Uint256Model(BaseModel):
+    value: Uint256
+
+
 UINT_MODELS: dict[Type[BaseUint], Type[BaseModel]] = {
     Uint8: Uint8Model,
     Uint16: Uint16Model,
     Uint32: Uint32Model,
     Uint64: Uint64Model,
+    Uint256: Uint256Model,
 }
 """Mapping from Uint types to their corresponding Pydantic model classes."""
 
@@ -417,6 +422,10 @@ class TestUintSSZ:
             (Uint32, 0x01234567, "67452301"),
             (Uint64, 0x0000000000000000, "0000000000000000"),
             (Uint64, 0x0123456789ABCDEF, "efcdab8967452301"),
+            (Uint256, 0, "00" * 32),
+            (Uint256, 1, "01" + "00" * 31),
+            (Uint256, 0x0123456789ABCDEF, "efcdab8967452301" + "00" * 24),
+            (Uint256, 2**256 - 1, "ff" * 32),
         ],
     )
     def test_encode_decode_roundtrip(

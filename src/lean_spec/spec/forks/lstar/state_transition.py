@@ -1,13 +1,13 @@
-"""Lstar fork — state transition: slots, header, body, finalization."""
+"""Lstar fork — state transition."""
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable
 from typing import Any
 
 from lean_spec.spec.crypto.merkleization import hash_tree_root
 from lean_spec.spec.forks.lstar._base import LstarSpecBase
+from lean_spec.spec.forks.lstar.config import MAX_ATTESTATIONS_DATA
 from lean_spec.spec.forks.lstar.containers import (
     AggregatedAttestation,
-    AttestationData,
     Block,
     Checkpoint,
     HistoricalBlockHashes,
@@ -20,70 +20,14 @@ from lean_spec.spec.forks.lstar.containers import (
     Validators,
 )
 from lean_spec.spec.forks.lstar.errors import RejectionReason, SpecRejectionError
-from lean_spec.spec.forks.protocol import SpecStateType
 from lean_spec.spec.observability import (
     observe_state_transition,
 )
 from lean_spec.spec.ssz import ZERO_HASH, Boolean, Bytes32, SSZList, Uint64
 
 
-def attestation_data_matches_chain(
-    attestation_data: AttestationData,
-    historical_block_hashes: Sequence[Bytes32],
-) -> bool:
-    """
-    Check that attestation checkpoints point to blocks on a chain.
-
-    Args:
-        attestation_data: The attestation being validated.
-        historical_block_hashes: Chain view indexed by slot.
-            Empty slots carry the zero hash.
-
-    Returns:
-        True when all checkpoint roots match the chain at their slot.
-        False when any root is the zero hash.
-        False when any checkpoint slot is past the end of the chain view.
-    """
-    # Reject zero-hash checkpoints up front.
-    #
-    # Empty slots carry the zero hash on the chain.
-    # A vote whose recorded root equals the zero hash is meaningless.
-    if (
-        attestation_data.source.root == ZERO_HASH
-        or attestation_data.target.root == ZERO_HASH
-        or attestation_data.head.root == ZERO_HASH
-    ):
-        return False
-
-    # Reject checkpoints whose slot is beyond the chain view.
-    #
-    # Without this guard, indexed access raises IndexError.
-    source_slot = int(attestation_data.source.slot)
-    target_slot = int(attestation_data.target.slot)
-    head_slot = int(attestation_data.head.slot)
-    chain_length = len(historical_block_hashes)
-    if source_slot >= chain_length or target_slot >= chain_length or head_slot >= chain_length:
-        return False
-
-    # All checkpoint roots must match the chain at their slot.
-    return (
-        attestation_data.source.root == historical_block_hashes[source_slot]
-        and attestation_data.target.root == historical_block_hashes[target_slot]
-        and attestation_data.head.root == historical_block_hashes[head_slot]
-    )
-
-
 class StateTransitionMixin(LstarSpecBase):
     """State transition function for the lstar fork."""
-
-    def upgrade_state(self, state: SpecStateType) -> State:
-        """
-        Lstar is the root fork: there is no predecessor, so no migration.
-
-        Returns the input state unchanged.
-        """
-        assert isinstance(state, State)
-        return state
 
     def generate_genesis(self, genesis_time: Uint64, validators: SSZList[Any]) -> State:
         """Generate a genesis state with empty history and proper initial values."""
@@ -123,10 +67,8 @@ class StateTransitionMixin(LstarSpecBase):
         """
         Advance the state through empty slots up to, but not including, target_slot.
 
-        The loop:
-          - Performs per-slot maintenance (e.g., state root caching).
-          - Increments the slot counter after each call.
-        The function returns a new state with slot == target_slot.
+        The pre-block state root is cached at most once per block.
+        Only the first empty slot after a block finds an empty root to fill.
 
         Raises:
             SpecRejectionError: BLOCK_SLOT_NOT_IN_FUTURE if target_slot is not in the future.
@@ -154,7 +96,7 @@ class StateTransitionMixin(LstarSpecBase):
                     "latest_block_header": state.latest_block_header.model_copy(
                         update={"state_root": cached_state_root}
                     ),
-                    "slot": Slot(state.slot + Slot(1)),
+                    "slot": state.slot + Slot(1),
                 }
             )
 
@@ -164,19 +106,6 @@ class StateTransitionMixin(LstarSpecBase):
     def process_block_header(self, state: State, block: Block) -> State:
         """
         Validate the block header and update header-linked state.
-
-        Checks:
-          - The block slot equals the current state slot.
-          - The block slot is newer than the latest header slot.
-          - The proposer index matches the round-robin selection.
-          - The parent root matches the hash of the latest block header.
-
-        Updates:
-          - For the first post-genesis block, mark genesis as justified/finalized.
-          - Append the parent root to historical hashes.
-          - Append the justified bit for the parent (true only for genesis).
-          - Insert ZERO_HASH entries for any skipped empty slots.
-          - Set latest_block_header for the new block with an empty state_root.
 
         Raises:
             SpecRejectionError: If any header check fails (slot mismatch, block older
@@ -322,20 +251,37 @@ class StateTransitionMixin(LstarSpecBase):
         attestations: Iterable[AggregatedAttestation],
     ) -> State:
         """
-        Apply attestations and update justification/finalization
-        according to the Lean Consensus 3SF-mini rules.
-
-        This simplified consensus mechanism:
-        1. Processes each attestation
-        2. Updates justified status for target checkpoints
-        3. Applies finalization rules based on justified status
+        Apply attestations and update justification and finalization under 3SF-mini rules.
 
         Raises:
+            SpecRejectionError: TOO_MANY_ATTESTATION_DATA if the distinct data
+                count exceeds the per-block cap.
             SpecRejectionError: EMPTY_AGGREGATION_BITS if an attestation that passes
                 the vote filters has no set bits.
             SpecRejectionError: VALIDATOR_INDEX_OUT_OF_RANGE if a set bit points
                 outside the validator registry.
         """
+        # Bound the distinct votes the block may carry.
+        #
+        # The cap belongs to the transition itself, not to any one caller.
+        # Both the state transition and block-production trial blocks rely on it.
+        #
+        # Each distinct attestation data builds a tally sized to the validator set.
+        # An unbounded count of them amplifies import work.
+        # The SSZ list limit sits far above the consensus cap, so it cannot substitute.
+        #
+        # Only the distinct count is bounded, not the total.
+        # Split aggregates for one target share their data and count once.
+        # Re-marking a voter from a repeated entry is idempotent, so it stays valid.
+        aggregated_attestations = tuple(attestations)
+        distinct_attestation_data = {attestation.data for attestation in aggregated_attestations}
+        if len(distinct_attestation_data) > int(MAX_ATTESTATIONS_DATA):
+            raise SpecRejectionError(
+                RejectionReason.TOO_MANY_ATTESTATION_DATA,
+                f"Block contains {len(distinct_attestation_data)} distinct AttestationData "
+                f"entries; maximum is {MAX_ATTESTATIONS_DATA}",
+            )
+
         # Reconstruct the vote-tracking structure
         #
         # The state stores justification data in a compact SSZ layout:
@@ -390,7 +336,7 @@ class StateTransitionMixin(LstarSpecBase):
         # "I vote to extend the chain from SOURCE to TARGET."
         #
         # The rules below filter out invalid or irrelevant votes.
-        for attestation in attestations:
+        for attestation in aggregated_attestations:
             source = attestation.data.source
             target = attestation.data.target
 
@@ -416,9 +362,7 @@ class StateTransitionMixin(LstarSpecBase):
             #
             # This prevents votes about unknown or conflicting forks.
             # It also rejects zero-hash source or target roots.
-            if not attestation_data_matches_chain(
-                attestation.data, state.historical_block_hashes.data
-            ):
+            if not attestation.data.lies_on_chain(state.historical_block_hashes.data):
                 continue
 
             # Ensure time flows forward.
@@ -588,11 +532,6 @@ class StateTransitionMixin(LstarSpecBase):
     ) -> State:
         """
         Apply the complete state transition function for a block.
-
-        This method represents the full state transition function:
-        1. Process slots up to the block's slot
-        2. Process the block header and body
-        3. Validate the computed state root
 
         Signatures are verified outside this function, before it is called.
 

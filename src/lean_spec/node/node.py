@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Final
 
-from lean_spec.node.api import AggregatorController, ApiServer, ApiServerConfig
+from lean_spec.node.api import ApiServer, ApiServerConfig
 from lean_spec.node.chain import SlotClock
 from lean_spec.node.chain.service import ChainService
 from lean_spec.node.metrics import registry as metrics
@@ -128,10 +128,10 @@ class NodeConfig:
     When False (default):
     - The node runs in standard validator or passive mode
 
-    Seeds the initial value of the live aggregator flag on SyncService and
-    NetworkService. The flag can be toggled at runtime via the admin API
-    (see AggregatorController). Runtime toggles do not persist across
-    restarts and do not update the local ENR or subnet subscriptions.
+    Seeds the initial value of the live aggregator flag on the sync service.
+    The flag can be toggled at runtime via the admin API.
+    Runtime toggles do not persist across restarts.
+    They do not update the local ENR or subnet subscriptions.
     """
 
     anchor_store: Store | None = field(default=None)
@@ -226,7 +226,7 @@ class Node:
         # If the database contains valid state, resume from there.
         # Otherwise, fall through to genesis initialization.
         store = cls._try_load_store_from_database(
-            database, validator_index, config.genesis_time, config.time_fn, fork
+            database, validator_index, fork, config.genesis_time, config.time_fn
         )
 
         # An explicit anchor wins over genesis synthesis but loses to the database.
@@ -299,7 +299,6 @@ class Node:
             sync_service=sync_service,
             event_source=config.event_source,
             network_name=config.network_name,
-            is_aggregator=config.is_aggregator,
         )
 
         # Wire up aggregated attestation publishing.
@@ -311,18 +310,14 @@ class Node:
         # Create API server if configured
         api_server: ApiServer | None = None
         if config.api_config is not None:
-            # Controller lets the admin API rotate the aggregator role at
-            # runtime when another aggregator becomes unhealthy.
-            aggregator_controller = AggregatorController(
-                sync_service=sync_service,
-                network_service=network_service,
-            )
-            # Store getter captures sync_service to get the live store
+            # The admin API reads and mutates the sync service aggregator flag,
+            # letting operators rotate the role at runtime without a restart.
+            # Store getter captures sync_service to get the live store.
             api_server = ApiServer(
                 config=config.api_config,
                 spec=fork,
                 store_getter=lambda: sync_service.store,
-                aggregator_controller=aggregator_controller,
+                aggregator_role_control=sync_service,
             )
 
         # Create validator service if registry provided.
@@ -375,9 +370,9 @@ class Node:
     def _try_load_store_from_database(
         database: Database | None,
         validator_index: ValidatorIndex | None,
+        fork: ForkProtocol,
         genesis_time: Uint64 | None = None,
         time_fn: Callable[[], float] = time.time,
-        fork: ForkProtocol | None = None,
     ) -> Store | None:
         """
         Try to load forkchoice store from existing database state.
@@ -393,9 +388,9 @@ class Node:
         Args:
             database: Database to load from.
             validator_index: Validator index for the store instance.
+            fork: Fork specification for store construction.
             genesis_time: Unix timestamp of genesis (slot 0).
             time_fn: Wall-clock time source.
-            fork: Fork specification for store construction.
 
         Returns:
             Loaded Store or None if no valid state exists.
@@ -443,8 +438,7 @@ class Node:
         #
         # The store starts with just the head block and state.
         # Additional blocks can be loaded on demand or via sync.
-        store_cls = fork.store_class if fork is not None else Store
-        return store_cls(
+        return fork.store_class(
             time=Interval(store_time),
             config=head_state.config,
             head=head_root,
@@ -468,10 +462,6 @@ class Node:
         """
         if install_signal_handlers:
             self._install_signal_handlers()
-
-        # Start API server if configured
-        if self.api_server is not None:
-            await self.api_server.start()
 
         # Run services concurrently.
         #

@@ -174,13 +174,18 @@ class TestDatabaseLoading:
 
     def test_returns_none_when_no_database(self) -> None:
         """No database returns None."""
-        assert Node._try_load_store_from_database(None, validator_index=None) is None
+        assert (
+            Node._try_load_store_from_database(None, validator_index=None, fork=LstarSpec()) is None
+        )
 
     def test_returns_none_when_no_head_root(self) -> None:
         """Empty database returns None."""
         empty_db = SQLiteDatabase(":memory:", State, Block)
 
-        assert Node._try_load_store_from_database(empty_db, validator_index=None) is None
+        assert (
+            Node._try_load_store_from_database(empty_db, validator_index=None, fork=LstarSpec())
+            is None
+        )
 
     def test_returns_none_when_block_missing(self) -> None:
         """A head root pointing at no stored block returns None."""
@@ -188,7 +193,9 @@ class TestDatabaseLoading:
         db = SQLiteDatabase(":memory:", State, Block)
         db.put_head_root(head_root)
 
-        assert Node._try_load_store_from_database(db, validator_index=None) is None
+        assert (
+            Node._try_load_store_from_database(db, validator_index=None, fork=LstarSpec()) is None
+        )
 
     def test_returns_none_when_state_missing(self) -> None:
         """A head root with a stored block but no stored state returns None."""
@@ -197,7 +204,9 @@ class TestDatabaseLoading:
         db.put_block(block, head_root)
         db.put_head_root(head_root)
 
-        assert Node._try_load_store_from_database(db, validator_index=None) is None
+        assert (
+            Node._try_load_store_from_database(db, validator_index=None, fork=LstarSpec()) is None
+        )
 
     def test_returns_none_when_justified_missing(self) -> None:
         """A populated head with no justified checkpoint returns None."""
@@ -207,7 +216,9 @@ class TestDatabaseLoading:
         db.put_state(state, head_root)
         db.put_head_root(head_root)
 
-        assert Node._try_load_store_from_database(db, validator_index=None) is None
+        assert (
+            Node._try_load_store_from_database(db, validator_index=None, fork=LstarSpec()) is None
+        )
 
     def test_returns_none_when_finalized_missing(self) -> None:
         """A populated head with a justified but no finalized checkpoint returns None."""
@@ -218,7 +229,9 @@ class TestDatabaseLoading:
         db.put_head_root(head_root)
         db.put_justified_checkpoint(checkpoint)
 
-        assert Node._try_load_store_from_database(db, validator_index=None) is None
+        assert (
+            Node._try_load_store_from_database(db, validator_index=None, fork=LstarSpec()) is None
+        )
 
     def test_successful_load_uses_wall_clock_time(self) -> None:
         """Store time uses wall clock when it exceeds block-based time."""
@@ -230,6 +243,7 @@ class TestDatabaseLoading:
         store = Node._try_load_store_from_database(
             db,
             validator_index=ValidatorIndex(0),
+            fork=LstarSpec(),
             genesis_time=GENESIS_TIME,
             time_fn=lambda: wall_time,
         )
@@ -253,6 +267,7 @@ class TestDatabaseLoading:
         store = Node._try_load_store_from_database(
             db,
             validator_index=ValidatorIndex(0),
+            fork=LstarSpec(),
             genesis_time=GENESIS_TIME,
             time_fn=lambda: wall_time,
         )
@@ -389,6 +404,7 @@ class TestDatabaseGenesisTimeFallback:
         store = Node._try_load_store_from_database(
             db,
             validator_index=None,
+            fork=LstarSpec(),
             genesis_time=None,
             time_fn=lambda: wall_time,
         )
@@ -409,6 +425,7 @@ class TestDatabaseGenesisTimeFallback:
         store = Node._try_load_store_from_database(
             db,
             validator_index=None,
+            fork=LstarSpec(),
             genesis_time=None,
             time_fn=lambda: wall_time,
         )
@@ -677,26 +694,19 @@ class TestRunWithOptionalServices:
     """Tests for run() with optional API and validator services."""
 
     async def test_run_with_api_server(self, node_config: NodeConfig) -> None:
-        """run() starts and runs the API server task when configured."""
+        """run() runs the API server task when configured."""
         config = dataclasses.replace(
             node_config, api_config=ApiServerConfig(host="127.0.0.1", port=0)
         )
         node = Node.from_genesis(config)
         assert node.api_server is not None
 
-        mock_start = AsyncMock()
         mock_run = AsyncMock()
 
         asyncio.get_running_loop().call_later(0.05, node.stop)
-        with (
-            patch.object(type(node.api_server), "start", mock_start),
-            patch.object(type(node.api_server), "run", mock_run),
-        ):
+        with patch.object(type(node.api_server), "run", mock_run):
             await node.run(install_signal_handlers=False)
 
-        # Both start() (called before TaskGroup) and run() (added to TaskGroup)
-        # must be awaited for the API server to function.
-        mock_start.assert_awaited_once()
         mock_run.assert_awaited_once()
 
     async def test_run_with_validator_service(self, node_with_validator: Node) -> None:

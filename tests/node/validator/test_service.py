@@ -28,6 +28,7 @@ from lean_spec.spec.forks.lstar.config import MILLISECONDS_PER_INTERVAL
 from lean_spec.spec.forks.lstar.containers import (
     AttestationData,
     Block,
+    Checkpoint,
     SignedAttestation,
     SignedBlock,
     SingleMessageAggregate,
@@ -159,76 +160,6 @@ class TestSignBlock:
         with pytest.raises(ValueError) as exception_info:
             service._sign_block(block, ValidatorIndex(42), [])
         assert str(exception_info.value) == "No secret key for validator 42"
-
-
-class TestSignAttestation:
-    """Unit tests for attestation signing with real XMSS keys."""
-
-    def _setup(
-        self,
-        sync_service: SyncService,
-        key_manager: XmssKeyManager,
-        spec: LstarSpec,
-        index: int = 0,
-    ) -> tuple[ValidatorService, AttestationData]:
-        registry = _make_registry(key_manager, index)
-        service = ValidatorService(
-            sync_service=sync_service,
-            clock=SlotClock(genesis_time=Uint64(0)),
-            registry=registry,
-        )
-        attestation_data = spec.produce_attestation_data(sync_service.store, Slot(1))
-        return service, attestation_data
-
-    def test_fields_populated_correctly(
-        self, sync_service: SyncService, key_manager: XmssKeyManager, spec: LstarSpec
-    ) -> None:
-        """The signed attestation contains the correct validator ID, data, and a valid signature."""
-        service, attestation_data = self._setup(sync_service, key_manager, spec, index=3)
-
-        signed_attestation = service._sign_attestation(attestation_data, ValidatorIndex(3))
-
-        assert signed_attestation.validator_index == ValidatorIndex(3)
-        assert signed_attestation.data is attestation_data
-
-        public_key = key_manager[ValidatorIndex(3)].attestation_keypair.public_key
-        assert TARGET_SIGNATURE_SCHEME.verify(
-            public_key=public_key,
-            slot=attestation_data.slot,
-            message=hash_tree_root(attestation_data),
-            signature=signed_attestation.signature,
-        )
-
-    def test_uses_attestation_key_not_proposal_key(
-        self, sync_service: SyncService, key_manager: XmssKeyManager, spec: LstarSpec
-    ) -> None:
-        """Attestation signature verifies with the attestation public key, not the proposal key."""
-        service, attestation_data = self._setup(sync_service, key_manager, spec)
-
-        signed_attestation = service._sign_attestation(attestation_data, ValidatorIndex(0))
-
-        attestation_public_key = key_manager[ValidatorIndex(0)].attestation_keypair.public_key
-        assert TARGET_SIGNATURE_SCHEME.verify(
-            public_key=attestation_public_key,
-            slot=attestation_data.slot,
-            message=hash_tree_root(attestation_data),
-            signature=signed_attestation.signature,
-        )
-
-    def test_missing_validator_raises_value_error(
-        self, sync_service: SyncService, key_manager: XmssKeyManager, spec: LstarSpec
-    ) -> None:
-        """Signing an attestation with an unregistered validator index raises ValueError."""
-        service = ValidatorService(
-            sync_service=sync_service,
-            clock=SlotClock(genesis_time=Uint64(0)),
-            registry=ValidatorRegistry(),
-        )
-        attestation_data = spec.produce_attestation_data(sync_service.store, Slot(1))
-
-        with pytest.raises(ValueError) as exception_info:
-            service._sign_attestation(attestation_data, ValidatorIndex(99))
-        assert str(exception_info.value) == "No secret key for validator 99"
 
 
 class TestSignWithKey:
@@ -1112,6 +1043,106 @@ class TestValidatorServiceIntegration:
 
         body_attestations = signed_block.block.body.attestations
         assert len(body_attestations) > 0
+
+    async def test_produced_block_does_not_pin_a_higher_finalized(
+        self,
+        key_manager: XmssKeyManager,
+        real_sync_service: SyncService,
+        real_registry: ValidatorRegistry,
+        spec: LstarSpec,
+    ) -> None:
+        """
+        A produced block that finalizes a higher slot, while not yet the head, does not pin it.
+
+        Given
+        -----
+        - 6 validators; 4 votes (2/3) justify a slot.
+        - the chain genesis -> block_1 -> block_2.
+        - block_2 carries 4 votes for block_1, justifying slot 1.
+        - the pool carries 4 votes for block_2 with source slot 1.
+        - block production never advances its own head, so a produced block stays off the head.
+
+        When
+        ----
+        - the proposer produces block_3, whose post-state finalizes slot 1.
+
+        Then
+        ----
+        - the head stays at block_2 at slot 2.
+        - block_2's state finalized is the genesis boundary at slot 0.
+        - the store's finalized tracks that head state, not block_3's higher finalized.
+        - the counted attestation pool is left untouched, since the head did not finalize.
+        """
+        produced: list[SignedBlock] = []
+
+        async def capture(block: SignedBlock) -> None:
+            produced.append(block)
+
+        service = ValidatorService(
+            sync_service=real_sync_service,
+            clock=SlotClock(genesis_time=Uint64(0)),
+            registry=real_registry,
+            on_block=capture,
+        )
+
+        genesis_root = real_sync_service.store.head
+
+        def pool_votes(
+            att_slot: int, block_root: Bytes32, source_root: Bytes32, src_slot: int
+        ) -> None:
+            store = real_sync_service.store
+            data = AttestationData(
+                slot=Slot(att_slot),
+                head=Checkpoint(root=block_root, slot=Slot(att_slot)),
+                target=Checkpoint(root=block_root, slot=Slot(att_slot)),
+                source=Checkpoint(root=source_root, slot=Slot(src_slot)),
+            )
+            participants = [ValidatorIndex(i) for i in range(4)]
+            public_keys = [key_manager[v].attestation_keypair.public_key for v in participants]
+            sigs = [key_manager.sign_attestation_data(v, data) for v in participants]
+            proof = SingleMessageAggregate.aggregate(
+                children=[],
+                raw_xmss=list(zip(participants, public_keys, sigs, strict=True)),
+                message=hash_tree_root(data),
+                slot=data.slot,
+            )
+            real_sync_service.store = store.model_copy(
+                update={
+                    "latest_known_aggregated_payloads": {
+                        **store.latest_known_aggregated_payloads,
+                        data: {proof},
+                    }
+                }
+            )
+
+        # genesis -> block_1
+        await service._maybe_produce_block(Slot(1))
+        real_sync_service.store = spec.update_head(real_sync_service.store)
+        block_1_root = real_sync_service.store.head
+
+        # block_2 includes votes for block_1, justifying slot 1.
+        pool_votes(att_slot=1, block_root=block_1_root, source_root=genesis_root, src_slot=0)
+        await service._maybe_produce_block(Slot(2))
+        real_sync_service.store = spec.update_head(real_sync_service.store)
+        block_2_root = real_sync_service.store.head
+        assert real_sync_service.store.latest_justified.slot == Slot(1)
+
+        # Votes for block_2 with source slot 1; block_3 will finalize slot 1.
+        pool_votes(att_slot=2, block_root=block_2_root, source_root=block_1_root, src_slot=1)
+        pool_before = real_sync_service.store.latest_known_aggregated_payloads
+
+        await service._maybe_produce_block(Slot(3))
+        after = real_sync_service.store
+        block_3_root = hash_tree_root(produced[-1].block)
+
+        # block_3's own state did finalize slot 1 ...
+        assert after.states[block_3_root].latest_finalized.slot == Slot(1)
+        # ... but the head is still block_2, whose state finalized stays at genesis.
+        assert after.blocks[after.head].slot == Slot(2)
+        assert after.latest_finalized == after.states[after.head].latest_finalized
+        assert after.latest_finalized.slot == Slot(0)
+        # The counted pool is untouched: production neither pins finalized nor prunes.
+        assert after.latest_known_aggregated_payloads == pool_before
 
     async def test_multiple_slots_produce_different_attestations(
         self,

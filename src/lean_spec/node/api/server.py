@@ -1,9 +1,4 @@
-"""
-API server implementation using aiohttp.
-
-Provides the HTTP server that serves routes defined in routes.py.
-See endpoints/ for endpoint specifications and handlers.
-"""
+"""API server implementation using aiohttp."""
 
 from __future__ import annotations
 
@@ -14,25 +9,16 @@ from dataclasses import dataclass, field
 
 from aiohttp import web
 
-from lean_spec.node.api.aggregator_controller import AggregatorController
-from lean_spec.node.api.routes import ROUTES
+from lean_spec.node.api.context import AggregatorRoleControl, ApiContext
+from lean_spec.node.api.handlers import ApiHandlers
 from lean_spec.spec.forks import LstarSpec, Store
 
 logger = logging.getLogger(__name__)
 
 
-# The following classes are implementation details.
-# Other implementations may structure their code differently.
-
-
 @dataclass(frozen=True, slots=True)
 class ApiServerConfig:
-    """
-    Configuration for the API server.
-
-    Implementation-specific. Other implementations may use different
-    configuration patterns (env vars, config files, CLI args, etc.).
-    """
+    """Configuration for the API server."""
 
     host: str = "0.0.0.0"
     """Host address to bind to."""
@@ -43,16 +29,7 @@ class ApiServerConfig:
 
 @dataclass(slots=True)
 class ApiServer:
-    """
-    HTTP API server using aiohttp.
-
-    Implementation-specific. This class handles:
-    - Server lifecycle (start, stop, run)
-    - Route registration
-    - Store access via callable getter
-
-    Other implementations may use different frameworks or patterns.
-    """
+    """HTTP API server using aiohttp."""
 
     config: ApiServerConfig
     """Server configuration."""
@@ -63,13 +40,8 @@ class ApiServer:
     store_getter: Callable[[], Store | None] | None = None
     """Callable that returns the current Store instance."""
 
-    aggregator_controller: AggregatorController | None = None
-    """
-    Optional controller for toggling the aggregator role at runtime.
-
-    When present, the admin aggregator endpoints can query and mutate the
-    node's aggregator flag. When absent, those endpoints return 503.
-    """
+    aggregator_role_control: AggregatorRoleControl | None = None
+    """Optional runtime accessor for the node's aggregator role."""
 
     _runner: web.AppRunner | None = field(default=None, init=False)
     """aiohttp application runner."""
@@ -89,19 +61,28 @@ class ApiServer:
         """Start the API server in the background."""
         app = web.Application()
 
-        # Store the store_getter in app for handlers that need store access
-        app["store_getter"] = self.store_getter
+        # Resolve the shared dependencies once and bind them to the handlers.
+        # Every route then serves through a handler method that reads them.
+        context = ApiContext(
+            spec=self.spec,
+            store_getter=self.store_getter,
+            aggregator_role_control=self.aggregator_role_control,
+        )
+        handlers = ApiHandlers(context)
 
-        # Expose the fork spec for handlers that drive consensus computations.
-        app["spec"] = self.spec
-
-        # Expose the aggregator controller to admin endpoints.
-        # Absence is fine; endpoints return 503 when unset.
-        app["aggregator_controller"] = self.aggregator_controller
-
-        # Register every route from the unified table, keyed by its verb.
-        routes = [web.route(route.method, route.path, route.handler) for route in ROUTES]
-        app.add_routes(routes)
+        # The admin routes under /lean/v0/admin are unauthenticated.
+        # Deployments must restrict access to them at the network layer.
+        app.add_routes(
+            [
+                web.get("/lean/v0/health", handlers.health),
+                web.get("/lean/v0/states/finalized", handlers.finalized_state),
+                web.get("/lean/v0/checkpoints/justified", handlers.justified_checkpoint),
+                web.get("/lean/v0/fork_choice", handlers.fork_choice),
+                web.get("/metrics", handlers.metrics),
+                web.get("/lean/v0/admin/aggregator", handlers.aggregator_status),
+                web.post("/lean/v0/admin/aggregator", handlers.aggregator_toggle),
+            ]
+        )
 
         self._runner = web.AppRunner(app)
         await self._runner.setup()
@@ -112,11 +93,7 @@ class ApiServer:
         logger.info("API server listening on %s:%d", self.config.host, self.config.port)
 
     async def run(self) -> None:
-        """
-        Run the API server until shutdown.
-
-        Blocks until stop() is called.
-        """
+        """Run the API server until it is asked to stop."""
         await self.start()
         await self._stop_event.wait()
 

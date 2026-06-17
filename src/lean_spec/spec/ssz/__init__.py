@@ -7,13 +7,17 @@ from lean_spec.spec.ssz.byte_arrays import (
     BaseByteList,
     BaseBytes,
     ByteList512KiB,
+    Bytes1,
     Bytes4,
+    Bytes8,
     Bytes16,
     Bytes20,
     Bytes32,
     Bytes33,
+    Bytes48,
     Bytes52,
     Bytes64,
+    Bytes96,
 )
 from lean_spec.spec.ssz.collections import SSZList, SSZVector
 from lean_spec.spec.ssz.container import Container
@@ -24,7 +28,7 @@ from lean_spec.spec.ssz.exceptions import (
     SSZValueError,
 )
 from lean_spec.spec.ssz.ssz_base import SSZType
-from lean_spec.spec.ssz.uint import Uint8, Uint16, Uint32, Uint64
+from lean_spec.spec.ssz.uint import Uint8, Uint16, Uint32, Uint64, Uint256
 
 __all__ = [
     "ZERO_HASH",
@@ -34,13 +38,17 @@ __all__ = [
     "BaseBytes",
     "Boolean",
     "ByteList512KiB",
+    "Bytes1",
     "Bytes4",
+    "Bytes8",
     "Bytes16",
     "Bytes20",
     "Bytes32",
     "Bytes33",
+    "Bytes48",
     "Bytes52",
     "Bytes64",
+    "Bytes96",
     "Container",
     "SSZError",
     "SSZList",
@@ -53,4 +61,5 @@ __all__ = [
     "Uint16",
     "Uint32",
     "Uint64",
+    "Uint256",
 ]

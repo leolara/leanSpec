@@ -38,6 +38,8 @@ dependencies = [
     "aioquic>=1.2.0,<2",
     "pyyaml>=6.0.0,<7",
     "prometheus-client>=0.21.0,<1",
+    "milagro-bls-binding>=1.9.0,<2",
+    "py-arkworks-bls12381>=0.4.1,<1",
 ]
 
 [project.license]
@@ -82,7 +84,7 @@ ban-relative-imports = "all"
 [tool.ruff.lint.isort]
 combine-as-imports = true
 force-single-line = false
-known-first-party = ["lean_spec", "consensus_testing"]
+known-first-party = ["lean_spec", "consensus_testing", "pyspec_vectors_testing"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["D"]
@@ -135,6 +137,11 @@ timeout = 600
 [tool.coverage.run]
 source = ["src"]
 branch = true
+# The beacon fork family, Gloas and its successors, is a standalone literal port
+# verified by upstream consensus spec-test vectors, not by unit tests under tests/
+# (it is exempt from the mirrored-pytest rule). Exclude it from the unit-test
+# coverage gate, which only measures the lean protocol and shared libraries.
+omit = ["src/lean_spec/spec/forks/beacon/*"]
 
 [tool.coverage.report]
 fail_under = 90

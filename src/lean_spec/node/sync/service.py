@@ -380,6 +380,8 @@ class SyncService:
         # Only update our store if the block was actually processed.
         #
         # A block may be cached instead of processed if its parent is unknown.
+        # The processed path never awaits, so a concurrent clock tick cannot
+        # advance the store between the read above and this write-back.
         if gossip_block_outcome.processed:
             block_root = hash_tree_root(block.block)
             logger.info(

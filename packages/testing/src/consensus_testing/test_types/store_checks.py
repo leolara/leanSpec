@@ -83,7 +83,7 @@ class AttestationCheck(CamelModel):
     """
 
     def validate_attestation(
-        self, attestation: "AttestationData", location: str, step_index: int
+        self, attestation: AttestationData, location: str, step_index: int
     ) -> None:
         """Validate attestation properties."""
         for field_name in self.model_fields_set & _ATTESTATION_SLOT_ACCESSORS.keys():
@@ -246,6 +246,15 @@ class StoreChecks(SelectiveCheck):
     aggregated proof map.
     """
 
+    new_pool_proof_participants: dict[Slot, set[int]] | None = None
+    """
+    Expected union of participants across pending-pool proofs, keyed by target slot.
+
+    Compares the set of validator indices covered by every proof in the
+    pending aggregated proof map for each target slot.
+    Pins the coverage a fresh aggregation round produced in the pending pool.
+    """
+
     block_attestation_count: int | None = None
     """
     Expected number of aggregated attestations in the block body.
@@ -303,11 +312,11 @@ class StoreChecks(SelectiveCheck):
 
     def validate_against_store(
         self,
-        store: "Store",
+        store: Store,
         step_index: int,
-        block_registry: dict[str, "Block"] | None = None,
-        filled_block: "Block | None" = None,
-        old_head: "Bytes32 | None" = None,
+        block_registry: dict[str, Block] | None = None,
+        filled_block: Block | None = None,
+        old_head: Bytes32 | None = None,
     ) -> None:
         """
         Validate these checks against actual Store state.
@@ -428,6 +437,25 @@ class StoreChecks(SelectiveCheck):
             expected_target_slots = sorted(getattr(self, field_name))
             _check(field_name, actual_target_slots, expected_target_slots)
 
+        # Participant union across pending-pool proofs, per target slot
+        if "new_pool_proof_participants" in fields:
+            assert self.new_pool_proof_participants is not None
+            participants_by_target_slot: dict[Slot, set[int]] = {}
+            for attestation_data, proofs in store.latest_new_aggregated_payloads.items():
+                target_slot = attestation_data.target.slot
+                participants = participants_by_target_slot.setdefault(target_slot, set())
+                for proof in proofs:
+                    participants.update(
+                        int(validator_index)
+                        for validator_index in proof.participants.to_validator_indices()
+                    )
+            for target_slot, expected_participants in self.new_pool_proof_participants.items():
+                _check(
+                    f"new_pool_proof_participants[{target_slot}]",
+                    participants_by_target_slot.get(target_slot, set()),
+                    expected_participants,
+                )
+
         # Block body attestation count
         if "block_attestation_count" in fields:
             if filled_block is None:
@@ -495,8 +523,8 @@ class StoreChecks(SelectiveCheck):
 
     @staticmethod
     def _validate_block_attestations(
-        expected_checks: list["AggregatedAttestationCheck"],
-        filled_block: "Block",
+        expected_checks: list[AggregatedAttestationCheck],
+        filled_block: Block,
         step_index: int,
     ) -> None:
         """Validate detailed attestation structure in the block body."""
@@ -550,8 +578,8 @@ class StoreChecks(SelectiveCheck):
     @staticmethod
     def _validate_lexicographic_head(
         fork_labels: list[str],
-        store: "Store",
-        block_registry: dict[str, "Block"],
+        store: Store,
+        block_registry: dict[str, Block],
         step_index: int,
     ) -> None:
         """Validate lexicographic tiebreaker behavior."""
